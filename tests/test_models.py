@@ -2,6 +2,7 @@ import lkml
 import os
 from .conftest import ALL_FIELDS_DIRECTORY
 from lookml_zenml.model import LookerModel
+import yaml
 
 
 def test_parse_model_from_file_path():
@@ -10,4 +11,5 @@ def test_parse_model_from_file_path():
         lkml_result = lkml.load(file)
 
     result = LookerModel(path).model
+    print(result)
     assert result == lkml_result

@@ -1,0 +1,14 @@
+version: 1
+type: model
+name: model_with_all_fields
+label: "desired label name"
+connection: connection_name
+week_start_day: monday
+
+access_grants:
+  - name: access_grant_name
+    user_attribute: user_attribute_name
+    allowed_values: ["value_1", "value_2"]
+  - name: access_grant_name
+    user_attribute: user_attribute_name
+    allowed_values: ["value_1", "value_2"]
