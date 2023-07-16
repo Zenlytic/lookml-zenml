@@ -109,7 +109,11 @@ class LookMLProject:
         if "derived_table" in view:
             zenml_view["derived_table"]["sql"] = view["derived_table"]["sql"]
 
-        # "default_date": "replace_with_date_dimension",
+        first_date_field = next(
+            (f["name"] for f in zenml_view["fields"] if f["field_type"] == "dimension_group"), None
+        )
+        if first_date_field:
+            zenml_view["default_date"] = first_date_field
 
         return zenml_view
 
