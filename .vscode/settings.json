@@ -12,5 +12,8 @@
   "python.formatting.blackArgs": [
     "--line-length=110"
   ],
-  "python.formatting.blackPath": "./.venv/bin/black"
+  "python.formatting.blackPath": "./.venv/bin/black",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  }
 }

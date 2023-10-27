@@ -326,13 +326,13 @@ view: orders_view {
     #hidden: yes
   #}
 
-  #dimension: discount_percent_tier {
-    #type: tier
-    #tiers: [1,11,21,31,41, 51]
-    #style: integer
-    #sql:  ${discount_percent_dim} ;;
-    #hidden: yes
-  #}
+  dimension: discount_percent_tier {
+    type: tier
+    tiers: [1,11,21,31,41, 51]
+    style: integer
+    sql:  ${discount_percent_dim} ;;
+    hidden: yes
+  }
 
   measure: first_order {
     label: "First Order Date"
@@ -356,6 +356,30 @@ view: orders_view {
     sql: ${profile_id} ;;
     description: "How many distinct purchasers we have. Based on distinct profile_ids"
 
+  }
+  measure: distinct_blog_purchasers {
+    label: "Distinct Blog Purchasers"
+    type: count_distinct
+    sql: ${profile_id} ;;
+    description: "How many distinct purchasers we have. Based on distinct profile_ids"
+    filters: {
+      field: permanent_session_view.entry_page 
+      value: "-%blog%"
+    }
+  }
+
+  measure: distinct_influencer_blog_purchasers {
+    label: "Distinct Blog Purchasers"
+    type: count_distinct
+    sql: ${profile_id} ;;
+    description: "How many distinct purchasers we have. Based on distinct profile_ids"
+    filters: {
+      field: permanent_session_view.entry_page 
+      value: "-%blog%"
+    }
+    filters: [
+      permanent_session_view.referrer: "influencer"
+    ]
   }
 
 }

@@ -9,6 +9,10 @@ datagroup: pdt_refresh_24_hours {
   max_cache_age: "24 hours"
 }
 
+access_grant: test_access_grant {
+  user_attribute: user_attribute_name
+  allowed_values: ["value_1", "value_2"]
+}
 
 ############################ USERS #########################################
 
