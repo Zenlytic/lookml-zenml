@@ -14,6 +14,9 @@ def test_convert_dashboard():
     print(lkml_result[0])
     result = LookMLProject().convert_dashboard(lkml_result[0])
 
+    print()
+    print()
+    print(result)
     assert False
     assert result["version"] == 1
     assert result["type"] == "model"
