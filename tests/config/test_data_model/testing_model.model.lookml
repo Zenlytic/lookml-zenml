@@ -36,7 +36,7 @@ explore: user_view {
   join: last_touch_attribution_view {
     view_label: "Last Touch Attribution"
     type: left_outer
-    relationship: one_to_many
+    relationship: many_to_one
     sql_on: ${last_touch_attribution_view.profile_id} = ${orders_view.profile_id}  ;;
   }
 

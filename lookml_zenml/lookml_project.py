@@ -2,6 +2,7 @@ import re
 import os
 import lkml
 import yaml
+import uuid
 from collections import defaultdict
 
 # write code to walk through a directory and read lookml files using the lkml package imported above
@@ -93,23 +94,21 @@ class LookMLProject:
             print(f'Skipping join {join} without "sql_on" or "foreign_key"')
 
     @staticmethod
-    def get_view_metadata(model: dict):
+    def get_view_metadata(model: dict) -> dict:
         explores = model.get("explores", [])
-        print(LookMLProject.parse_sql_on("${zendesk_tickets.requester_id}=  ${zendesk_users.user_id}"))
 
-        identifier_graph = defaultdict(list)
+        identifier_graph = defaultdict(lambda: defaultdict(list))
         for explore in explores:
             root_view = explore["name"] if "from" not in explore else explore["from"]
-            print(root_view)
             for join in explore.get("joins", []):
+                pair_id = str(uuid.uuid4())
                 join_view = join["name"] if "from" not in join else join["from"]
-                print(join_view)
+
                 # Relationship always corresponds to the root view in the explore
                 # many_to_one is the default join type
                 relationship = join.get("relationship", "many_to_one")
                 join_type, references = LookMLProject.parse_join(join)
-                print(relationship)
-                print(join_type, references)
+
                 # If the relationship is one_to_one then we can assume that the
                 # key's used in the join are unique (primary) in both views
                 if relationship == "one_to_one":
@@ -117,149 +116,88 @@ class LookMLProject:
                         for reference in references:
                             print(reference)
                             view_name, field_name = reference.split(".")
-                            identifier = LookMLProject._to_identifier(field_name, "primary")
-                            identifier_graph[view_name].append(identifier)
+                            identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
+                            identifier_graph[view_name][identifier["sql"]].append(identifier)
 
+                # If the relationship is one_to_many then we can assume that the
+                # key's used in the join are unique (primary) ONLY if ther key references the root view
                 elif relationship == "one_to_many":
                     if join_type == "identifier":
                         for reference in references:
                             print(reference)
                             view_name, field_name = reference.split(".")
                             if view_name == root_view:
-                                identifier = LookMLProject._to_identifier(field_name, "primary")
+                                identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             else:
-                                identifier = LookMLProject._to_identifier(field_name, "foreign")
-                            identifier_graph[view_name].append(identifier)
+                                identifier = LookMLProject._to_identifier(field_name, "foreign", pair_id)
+                            identifier_graph[view_name][identifier["sql"]].append(identifier)
 
                 # We do not want to replicate many_to_many joins since they get out of hand quickly
                 elif relationship == "many_to_many":
                     pass
 
+                # If the relationship is many_to_one then we can assume that the
+                # key's used in the join are unique (primary) ONLY if the key references the join view
                 elif relationship == "many_to_one":
                     if join_type == "identifier":
                         for reference in references:
-                            print(reference)
                             view_name, field_name = reference.split(".")
-                            if view_name == root_view:
-                                identifier = LookMLProject._to_identifier(field_name, "foreign")
+                            if view_name == join_view:
+                                identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             else:
-                                identifier = LookMLProject._to_identifier(field_name, "primary")
-                            identifier_graph[view_name].append(identifier)
+                                identifier = LookMLProject._to_identifier(field_name, "foreign", pair_id)
+                            identifier_graph[view_name][identifier["sql"]].append(identifier)
                 else:
                     raise NotImplementedError(f"Relationship {relationship} is not supported")
 
-        print(identifier_graph)
-        [
-            {
-                "label": "Signed in Users",
-                "joins": [
-                    {
-                        "view_label": "Profile Facts",
-                        "type": "left_outer",
-                        "relationship": "one_to_one",
-                        "sql_on": "${user_view.id} = ${profile_facts_view.profile_id}",
-                        "name": "profile_facts_view",
-                    },
-                    {
-                        "view_label": "Orders",
-                        "type": "left_outer",
-                        "relationship": "one_to_many",
-                        "sql_on": "${user_view.id} = ${orders_view.profile_id}",
-                        "name": "orders_view",
-                    },
-                    {
-                        "view_label": "Last Touch Attribution",
-                        "type": "left_outer",
-                        "relationship": "one_to_many",
-                        "sql_on": "${last_touch_attribution_view.profile_id} = ${orders_view.profile_id}",
-                        "name": "last_touch_attribution_view",
-                    },
-                    {
-                        "view_label": "Marketing Spend (Aligned on OrderWeek)",
-                        "type": "left_outer",
-                        "relationship": "one_to_many",
-                        "sql_on": "${marketing_spend_daily.date_date} = ${orders_view.orderdatetime_date}",
-                        "name": "marketing_spend_daily",
-                    },
-                ],
-                "name": "user_view",
-            },
-            {
-                "from": "all_visitors",
-                "label": "Sessions",
-                "view_label": "All Visitors",
-                "joins": [
-                    {
-                        "view_label": "Orders",
-                        "type": "left_outer",
-                        "sql_on": "${user_view.id} = ${orders_view.profile_id}",
-                        "relationship": "one_to_many",
-                        "name": "orders_view",
-                    },
-                    {
-                        "view_label": "Session to Profile",
-                        "from": "session_to_profile",
-                        "type": "left_outer",
-                        "sql_on": "${all_visitors_view.session_id} = ${session_to_profile_view.session}",
-                        "relationship": "one_to_one",
-                        "name": "session_to_profile_view",
-                    },
-                    {
-                        "view_label": "User",
-                        "type": "left_outer",
-                        "sql_on": "${session_to_profile_view.user_id} = ${user_view.id}",
-                        "relationship": "many_to_one",
-                        "name": "user_view",
-                    },
-                    {
-                        "view_label": "Profile Facts",
-                        "type": "left_outer",
-                        "relationship": "one_to_one",
-                        "sql_on": "${user_view.id} = ${profile_facts_view.profile_id}",
-                        "name": "profile_facts_view",
-                    },
-                ],
-                "name": "all_visitors_view",
-            },
-            {
-                "label": "Zendesk",
-                "joins": [
-                    {
-                        "view_label": "User",
-                        "type": "left_outer",
-                        "sql_on": "${zendesk_users.email} =${user_view.email}",
-                        "relationship": "one_to_one",
-                        "name": "user_view",
-                    },
-                    {
-                        "view_label": "Orders",
-                        "type": "left_outer",
-                        "sql_on": "${user_view.id} = ${orders_view.profile_id}",
-                        "relationship": "one_to_many",
-                        "fields": [
-                            "orders_view.id",
-                            "orders_view.profile_id",
-                            "orders_view.orderdatetime_date",
-                            "orders_view.orderdatetime_raw",
-                            "orders_view.orderdatetime_week",
-                            "orders_view.orderdatetime_month",
-                            "orders_view.order_count",
-                            "orders_view.first_order",
-                            "orders_view.latest_order",
-                        ],
-                        "name": "orders_view",
-                    },
-                    {
-                        "type": "left_outer",
-                        "relationship": "one_to_one",
-                        "sql_on": "${zendesk_tickets.requester_id}=  ${zendesk_users.user_id}",
-                        "name": "zendesk_users",
-                    },
-                ],
-                "name": "zendesk_tickets",
-            },
-        ]
-        raise NotImplementedError()
+        resolved_id_graph, pairs_resolved = defaultdict(list), []
+        for view_name, graph in identifier_graph.items():
+            for _, identifiers in graph.items():
+                names, view_types, view_sql = [], defaultdict(list), defaultdict(list)
+
+                # Loop through identifiers unique on view -> sql and then find the
+                # associated pair to connect for the right naming
+                for identifier in identifiers:
+                    pair_id = identifier["pair_id"]
+                    views, ids = LookMLProject._get_pair(pair_id, identifier_graph)
+                    for v, i in zip(views, ids):
+                        if i["pair_id"] not in pairs_resolved:
+                            names.append(i["name"])
+                            view_types[v].append(i["type"])
+                            view_sql[v].append(i["sql"])
+
+                # Mark pairs as resolved
+                pairs_resolved.extend(list(set(identifier["pair_id"] for identifier in identifiers)))
+
+                # Names need to match across all identifiers, so we find the longest name in
+                # the set of potentially joinable ids and use that name across all of them
+                if names:
+                    longest_name = max(names, key=len)
+                    derived_view_identifier_types = {
+                        v: "primary" if "primary" in types else "foreign" for v, types in view_types.items()
+                    }
+                    derived_view_sql = {v: list(set(sql))[0] for v, sql in view_sql.items()}
+                    for view in derived_view_identifier_types.keys():
+                        identifier = {
+                            "name": longest_name,
+                            "type": derived_view_identifier_types[view],
+                            "sql": derived_view_sql[view],
+                        }
+                        if identifier not in resolved_id_graph[view]:
+                            resolved_id_graph[view].append(identifier)
+
+        return resolved_id_graph
+
+    @staticmethod
+    def _get_pair(pair_id, id_graph):
+        views, ids = [], []
+        for view_name, graph in id_graph.items():
+            for _, identifiers in graph.items():
+                for identifier in identifiers:
+                    if identifier["pair_id"] == pair_id:
+                        views.append(view_name)
+                        ids.append(identifier)
+        return views, ids
 
     @staticmethod
     def convert_view(view: dict, model_name: str, access_filters: list = [], joins: list = []):
@@ -523,8 +461,8 @@ class LookMLProject:
         return converted
 
     @staticmethod
-    def _to_identifier(field_name: str, type: str):
-        return {"name": field_name, "type": type, "sql": f"${{{field_name}}}"}
+    def _to_identifier(field_name: str, type: str, pair_id: str):
+        return {"name": field_name, "type": type, "sql": f"${{{field_name}}}", "pair_id": pair_id}
 
     @staticmethod
     def is_lookml_file(file):
