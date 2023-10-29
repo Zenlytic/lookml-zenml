@@ -5,44 +5,58 @@ import yaml
 import uuid
 from collections import defaultdict
 
-# write code to walk through a directory and read lookml files using the lkml package imported above
-# and then print the YAML for each model and view in the directory
-# hint: use the lkml.load function to read the lookml files
-
-
-# Path: lookml_zenml/walk.py
-
 
 class LookMLProject:
-    def __init__(self, directory):
-        self.directory = directory
+    def __init__(self, in_directory: str = None, out_directory: str = None):
+        self.in_directory = in_directory
+        self.out_directory = out_directory
         self.field_mappings = []
 
-    def translate(self):
-        lookml = self.load()
-        models = self.translate_models(lookml)
-        views = self.translate_views(lookml)
-        dashboards = self.translate_dashboards(lookml)
+    def convert(self):
+        if not self.in_directory:
+            raise ValueError(
+                "You must pass the in_directory argument to the class to use this function. "
+                "If you want to convert dict -> dict use the convert_project function in this class"
+            )
+        lookml_project = self.load(self.in_directory)
+        models, views, dashboards = self.convert_project(lookml_project)
 
-        # Dump the files and sort
-        print(models)
-        print(views)
-        print(dashboards)
+        if not self.out_directory:
+            raise ValueError(
+                "You must pass the out_directory argument to the class to use this function. "
+                "If you want to convert dict -> dict use the convert_project function in this class"
+            )
+        self.dump(self.out_directory, models, views, dashboards)
 
-    @staticmethod
-    def translate_models(lookml: dict):
-        model_yaml_dicts = []
-        for model in lookml["models"]:
-            model_yaml = LookMLProject.convert_model(model)
-            model_yaml_dicts.append(model_yaml)
-        return model_yaml_dicts
+    def convert_project(self, lookml_project: dict):
+        models, views, dashboards = [], [], []
+        view_metadata = {}
+        views_to_models = {}
+        for raw_model in lookml_project["models"]:
+            model = self.convert_model(raw_model, generate_view_metadata=True)
+            model_view_metadata = model.pop("view_metadata", {})
+            view_metadata.update(model_view_metadata)
+            for view_name in set(model_view_metadata.keys()):
+                views_to_models[view_name] = model["name"]
+            models.append(model)
 
-    def translate_views(self, lookml: dict):
-        metadata = self.view_metadata(lookml)
-        views = []
-        for view in lookml["views"]:
-            views.append(self.convert_view(view, metadata))
-        return views
+        default_model_name = models[0]["name"]
+        for raw_view in lookml_project["views"]:
+            # We don't currently get access filters from the explores
+            # because they vary across explores for the same view
+            view = self.convert_view(
+                raw_view,
+                views_to_models.get(raw_view["name"], default_model_name),
+                access_filters=[],
+                joins=view_metadata.get(raw_view, []),
+            )
+            views.append(view)
+
+        for raw_dashboard in lookml_project["dashboard"]:
+            dashboard = self.convert_dashboard(raw_dashboard)
+            dashboards.append(dashboard)
+
+        return models, views, dashboards
 
     @staticmethod
     def convert_model(model: dict, generate_view_metadata: bool = False):
@@ -88,10 +102,8 @@ class LookMLProject:
     def parse_join(join: dict):
         if "sql_on" in join:
             return LookMLProject.parse_sql_on(join["sql_on"])
-        elif "foreign_key" in join:
-            return "foreign_key", [join["foreign_key"]]
         else:
-            print(f'Skipping join {join} without "sql_on" or "foreign_key"')
+            print(f'Skipping join {join} without "sql_on"')
 
     @staticmethod
     def get_view_metadata(model: dict) -> dict:
@@ -114,17 +126,15 @@ class LookMLProject:
                 if relationship == "one_to_one":
                     if join_type == "identifier":
                         for reference in references:
-                            print(reference)
                             view_name, field_name = reference.split(".")
                             identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             identifier_graph[view_name][identifier["sql"]].append(identifier)
 
                 # If the relationship is one_to_many then we can assume that the
-                # key's used in the join are unique (primary) ONLY if ther key references the root view
+                # key's used in the join are unique (primary) ONLY if the key references the root view
                 elif relationship == "one_to_many":
                     if join_type == "identifier":
                         for reference in references:
-                            print(reference)
                             view_name, field_name = reference.split(".")
                             if view_name == root_view:
                                 identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
@@ -243,10 +253,7 @@ class LookMLProject:
 
         return zenml_view
 
-    def translate_dashboards(self, lookml: dict):
-        return [self._translate_dashboard(dashboard) for dashboard in lookml["dashboards"]]
-
-    def _translate_dashboard(self, dashboard: dict):
+    def convert_dashboard(self, dashboard: dict):
         zenml_data = {
             "version": 1,
             "type": "dashboard",
@@ -387,9 +394,9 @@ class LookMLProject:
         matches = re.finditer(r"\$\{(.*?)\}", text, re.MULTILINE)
         return [match.group(1) for match in matches]
 
-    def load(self):
+    def load(self, in_directory: str):
         lookml = {"views": [], "models": [], "dashboards": []}
-        for root, _, files in os.walk(self.directory):
+        for root, _, files in os.walk(in_directory):
             for file in files:
                 if self.is_lookml_file(file):
                     lookml_file = os.path.join(root, file)
@@ -410,6 +417,35 @@ class LookMLProject:
                         lookml_dict = yaml.safe_load(f)
                     lookml["dashboards"].extend(lookml_dict)
         return lookml
+
+    @staticmethod
+    def dump(out_directory: str, models: list, views: list, dashboards: list):
+        zenlytic_project = {
+            "name": "new_zenlytic_project",
+            "profile": "new_zenlytic_project",
+            "dashboard-paths": ["dashboards"],
+            "view-paths": ["views"],
+            "model-paths": ["models"],
+        }
+        with open(os.path.join(out_directory, "zenlytic_project.yml"), "w") as f:
+            yaml.dump(zenlytic_project, f)
+
+        for directory in ["models", "views", "dashboards"]:
+            fully_qualified_path = os.path.join(out_directory, directory)
+            if not os.path.exists(fully_qualified_path):
+                os.mkdir(fully_qualified_path)
+
+        for model in models:
+            with open(os.path.join(out_directory, f"models/{model['name']}_model.yml"), "w") as f:
+                yaml.dump(model, f)
+
+        for view in views:
+            with open(os.path.join(out_directory, f"views/{view['name']}_view.yml"), "w") as f:
+                yaml.dump(view, f)
+
+        for dashboard in dashboards:
+            with open(os.path.join(out_directory, f"dashboards/{dashboard['name']}.yml"), "w") as f:
+                yaml.dump(dashboard, f)
 
     @staticmethod
     def convert_dimension(dimension_dict: dict):
