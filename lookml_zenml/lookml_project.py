@@ -11,6 +11,8 @@ class LookMLProject:
         self.in_directory = in_directory
         self.out_directory = out_directory
         self.field_mappings = []
+        self._views = []
+        self._models = []
 
     def convert(self):
         if not self.in_directory:
@@ -39,20 +41,23 @@ class LookMLProject:
             for view_name in set(model_view_metadata.keys()):
                 views_to_models[view_name] = model["name"]
             models.append(model)
+        self._models = models
 
         default_model_name = models[0]["name"]
         for raw_view in lookml_project["views"]:
             # We don't currently get access filters from the explores
             # because they vary across explores for the same view
+            print(view_metadata.get(raw_view["name"], []))
             view = self.convert_view(
                 raw_view,
                 views_to_models.get(raw_view["name"], default_model_name),
                 access_filters=[],
-                joins=view_metadata.get(raw_view, []),
+                joins=view_metadata.get(raw_view["name"], []),
             )
             views.append(view)
+        self._views = views
 
-        for raw_dashboard in lookml_project["dashboard"]:
+        for raw_dashboard in lookml_project["dashboards"]:
             dashboard = self.convert_dashboard(raw_dashboard)
             dashboards.append(dashboard)
 
@@ -266,7 +271,8 @@ class LookMLProject:
 
         for element in dashboard["elements"]:
             zenml_element = self._translate_dashboard_element(element)
-            zenml_data["elements"].append(zenml_element)
+            if zenml_element:
+                zenml_data["elements"].append(zenml_element)
 
         return zenml_data
 
@@ -277,12 +283,18 @@ class LookMLProject:
 
     def _translate_vanilla_element(self, element: dict):
         # We do not support conditional formatting in dashboards
-        zenml_element = {"title": element["title"], "model": element["model"], "metrics": [], "slice_by": []}
+        # We do not support non-query elements yet, either
+        if "model" not in element:
+            return None
+
+        zenml_element = {"model": element["model"], "metrics": [], "slice_by": []}
+        if "title" in element:
+            zenml_element["title"] = element["title"]
 
         # Add fields
         for f in element["fields"]:
-            field = self.zenlytic_project.get_field(f)
-            if field.field_type == "measure":
+            field = self._get_field(f, self._views)
+            if field["field_type"] == "measure":
                 zenml_element["metrics"].append(f)
             else:
                 zenml_element["slice_by"].append(f)
@@ -300,9 +312,9 @@ class LookMLProject:
             for sort_str in element["sorts"]:
                 split_str = sort_str.split(" ")
                 if len(split_str) == 1:
-                    zenml_element["sorts"].append({"field": split_str[0].lower(), "value": "asc"})
+                    zenml_element["sort"].append({"field": split_str[0].lower(), "value": "asc"})
                 else:
-                    zenml_element["sorts"].append(
+                    zenml_element["sort"].append(
                         {"field": split_str[0].lower(), "value": split_str[1].lower()}
                     )
                 zenml_element["filters"].append({"field": k, "value": v})
@@ -338,17 +350,28 @@ class LookMLProject:
         }
 
         if element.get("type") == "looker_column":
-            "bar" or "grouped_bar"
-            zenml_element["plot_type"] = "plot"
+            plot = "grouped_bar" if len(zenml_element["slice_by"]) > 1 else "bar"
+            zenml_element["plot_type"] = plot
         elif element.get("type") == "looker_line":
             "line" or "multi_line"
-            zenml_element["plot_type"] = "plot"
+            plot = "multi_line" if len(zenml_element["slice_by"]) > 1 else "line"
+            zenml_element["plot_type"] = plot
         elif element.get("type") in plot_lookup:
             zenml_element["plot_type"] = plot_lookup[element["type"]]
             if zenml_element["plot_type"] == "table_only":
                 zenml_element["force_table"] = True
 
         return zenml_element
+
+    def _get_field(self, field_id: str, views: list):
+        for v in views:
+            for f in v["fields"]:
+                if f"{v['name']}.{f['name']}" == field_id.lower() and f["field_type"] != "dimension_group":
+                    return f
+                elif f"{v['name']}.{f['name']}" in field_id.lower() and f["field_type"] == "dimension_group":
+                    return f
+        # If we can't find the field assume it will be a dimension on a dashboard
+        return {"field_type": "dimension"}
 
     def _clean_table_calc(self, formula: str):
         for field_to_replace in self.fields_to_replace(formula):
@@ -390,7 +413,10 @@ class LookMLProject:
 
         return self._translate_vanilla_element(first_element)
 
+    @staticmethod
     def fields_to_replace(text: str):
+        if text is None:
+            return []
         matches = re.finditer(r"\$\{(.*?)\}", text, re.MULTILINE)
         return [match.group(1) for match in matches]
 
