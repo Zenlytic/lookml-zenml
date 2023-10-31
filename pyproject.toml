@@ -25,3 +25,6 @@ line-length = 110
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+lookml_zenml = 'lookml_zenml:cli_group'
