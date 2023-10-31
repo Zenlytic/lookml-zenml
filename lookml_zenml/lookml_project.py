@@ -47,7 +47,6 @@ class LookMLProject:
         for raw_view in lookml_project["views"]:
             # We don't currently get access filters from the explores
             # because they vary across explores for the same view
-            print(view_metadata.get(raw_view["name"], []))
             view = self.convert_view(
                 raw_view,
                 views_to_models.get(raw_view["name"], default_model_name),
