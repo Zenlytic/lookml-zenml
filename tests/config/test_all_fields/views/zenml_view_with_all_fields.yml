@@ -1,0 +1,72 @@
+version: 1
+type: view
+name: view_name
+label: "field picker heading to use for the Explore's fields"
+description: description string
+model_name: replace_with_your_model_name
+required_access_grants: [access_grant_name, access_grant_name]
+sql_table_name: table_name
+derived_table:
+  sql: "SQL query"
+default_date: replace_with_date_dimension
+row_label: replace_with_logical_row_label
+
+sets:
+  - name: set_name
+    fields: [field_or_set, field_or_set]
+
+access_filter:
+  - field: fully_scoped_field
+    user_attribute: user_attribute_name
+
+identifiers:
+- name: view_name_join
+  type: join
+  reference: view_name
+  relationship: one_to_one
+  sql_on: SQL ON clause
+- name: view_name_join
+  type: join
+  reference: view_name
+  relationship: one_to_one
+  sql_on: SQL ON clause
+
+fields:
+  - name: field_name
+    label: "desired label name"
+    view_label: "desired label name"
+    group_label: "label used to group dimensions in the field picker"
+    value_format_name: format_name
+    field_type: dimension
+    type: field_type
+    sql: SQL expression to generate the field value
+    tags: ["string1", "string2"]
+    drill_fields: [field_or_set, field_or_set]
+    primary_key: no
+    hidden: no
+    case:
+      whens:
+        - sql: SQL condition
+          label: "value"
+        - sql: SQL condition
+          label: "value"
+      else: null
+  
+    tiers: [N,N]
+    required_access_grants: [access_grant_name, access_grant_name]
+    link: desired_url
+    timeframes: [timeframe, timeframe]
+    convert_tz: no
+    datatype: timestamp
+    intervals: [interval, interval]
+    sql_start: SQL expression for start time of duration ;;
+    sql_end: SQL expression for end time of duration ;;
+    sql_distinct_key: SQL expression to define repeated entities ;;
+    filters:
+    - field: dimension_name
+      value: "looker filter expression"
+    - field: dimension_name
+      value: "looker filter expression"
+    - field: dimension_name
+      value: "looker filter expression"
+
