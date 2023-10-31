@@ -51,7 +51,7 @@ def test_convert_view_cli():
 def test_convert_project_cli(monkeypatch):
     yaml_dump_called = False
 
-    def assert_called(out_directory, models, views, dashboards):
+    def assert_called(cls, out_directory, models, views, dashboards):
         nonlocal yaml_dump_called
         yaml_dump_called = True
         assert isinstance(models, list)
@@ -65,5 +65,5 @@ def test_convert_project_cli(monkeypatch):
 
     print(result)
     print(result.output)
-    assert yaml_dump_called
     assert result.exit_code == 0
+    assert yaml_dump_called
