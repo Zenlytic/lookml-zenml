@@ -316,7 +316,6 @@ class LookMLProject:
                     zenml_element["sort"].append(
                         {"field": split_str[0].lower(), "value": split_str[1].lower()}
                     )
-                zenml_element["filters"].append({"field": k, "value": v})
 
         if "show_totals" in element:
             zenml_element["show_totals"] = bool(element["show_totals"])
