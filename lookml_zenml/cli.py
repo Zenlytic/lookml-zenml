@@ -52,7 +52,13 @@ def _convert_logic(path: str, directory: str, out_directory: str, convert_type: 
 
     if out_directory:
         for o in result_objects:
-            with open(os.path.join(os.path.abspath(out_directory), o["name"]), "r") as f:
+            if convert_type == "model":
+                ext = "_model.yml"
+            elif convert_type == "view":
+                ext = "_view.yml"
+            else:
+                ext = ".yml"
+            with open(os.path.join(os.path.abspath(out_directory), f'{o["name"]}{ext}'), "w") as f:
                 yaml.dump(o, f)
     else:
         return result_objects
