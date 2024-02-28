@@ -450,7 +450,7 @@ class LookMLProject:
                 if self.is_lookml_dashboard_file(file):
                     lookml_file = os.path.join(root, file)
                     with open(lookml_file) as f:
-                        lookml_dict = yaml.safe_load(f)
+                        lookml_dict = yaml.load(f)
                     lookml["dashboards"].extend(lookml_dict)
         return lookml
 
