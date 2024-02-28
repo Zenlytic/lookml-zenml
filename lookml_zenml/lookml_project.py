@@ -1,9 +1,14 @@
 import re
 import os
 import lkml
-import yaml
+from ruamel.yaml import YAML
 import uuid
 from collections import defaultdict
+
+FIELD_KEY_ORDER = ["name", "field_type", "type", "description", "timeframes", "sql"]
+yaml = YAML()
+yaml.indent(sequence=4, offset=2)
+yaml.preserve_quotes = True
 
 
 class LookMLProject:
@@ -71,12 +76,17 @@ class LookMLProject:
         Returns: dict: A ZenML model (if generate_view_metadata is False) or a ZenML
                         with the extra key 'view_metadata' (if generate_view_metadata is True)
         """
-        model_yaml = {
-            "version": 1,
-            "type": "model",
-            "name": model["name"],
-            "connection": model["connection"],
-        }
+        try:
+            model_yaml = {
+                "version": 1,
+                "type": "model",
+                "name": model["name"],
+                "connection": model["connection"],
+            }
+        except KeyError as e:
+            raise KeyError(
+                f"The LookML model is missing a required key: {e}. Please check your model and try again."
+            )
         if "label" in model:
             model_yaml["label"] = model["label"]
         if "access_grants" in model:
@@ -226,16 +236,6 @@ class LookMLProject:
             "access_filters": access_filters,
             "identifiers": joins,
         }
-        dimensions = [
-            f for field in view.get("dimensions", []) if (f := LookMLProject.convert_dimension(field))
-        ]
-        dimension_groups = [
-            f
-            for field in view.get("dimension_groups", [])
-            if (f := LookMLProject.convert_dimension_group(field))
-        ]
-        measures = [f for field in view.get("measures", []) if (f := LookMLProject.convert_measure(field))]
-        zenml_view["fields"] = dimensions + dimension_groups + measures
 
         if "view_label" in view:
             zenml_view["label"] = view["view_label"]
@@ -249,11 +249,23 @@ class LookMLProject:
         if "derived_table" in view:
             zenml_view["derived_table"]["sql"] = view["derived_table"]["sql"]
 
-        first_date_field = next(
-            (f["name"] for f in zenml_view["fields"] if f["field_type"] == "dimension_group"), None
-        )
+        dimensions = [
+            f for field in view.get("dimensions", []) if (f := LookMLProject.convert_dimension(field))
+        ]
+        dimension_groups = [
+            f
+            for field in view.get("dimension_groups", [])
+            if (f := LookMLProject.convert_dimension_group(field))
+        ]
+        measures = [f for field in view.get("measures", []) if (f := LookMLProject.convert_measure(field))]
+
+        fields = dimensions + dimension_groups + measures
+
+        first_date_field = next((f["name"] for f in fields if f["field_type"] == "dimension_group"), None)
         if first_date_field:
             zenml_view["default_date"] = first_date_field
+
+        zenml_view["fields"] = fields
 
         return zenml_view
 
@@ -451,6 +463,9 @@ class LookMLProject:
             "view-paths": ["views"],
             "model-paths": ["models"],
         }
+        if not os.path.exists(out_directory):
+            raise ValueError(f"The output directory you specified, `{out_directory}` does not exist.")
+
         with open(os.path.join(out_directory, "zenlytic_project.yml"), "w") as f:
             yaml.dump(zenlytic_project, f)
 
@@ -485,7 +500,8 @@ class LookMLProject:
         if "links" in converted:
             links = converted.pop("links")
             converted["link"] = links[0].get("url")
-        return converted
+
+        return LookMLProject.sort_dict(converted, FIELD_KEY_ORDER)
 
     @staticmethod
     def convert_dimension_group(dimension_group_dict: dict):
@@ -498,7 +514,10 @@ class LookMLProject:
             converted["convert_tz"] = converted["convert_tz"] == "yes"
         if "convert_timezone" in converted:
             converted["convert_timezone"] = converted["convert_timezone"] == "yes"
-        return converted
+        if "timeframes" not in converted and "type" in converted and converted["type"] == "time":
+            converted["timeframes"] = ["raw", "date", "week", "month", "quarter", "year"]
+
+        return LookMLProject.sort_dict(converted, FIELD_KEY_ORDER)
 
     @staticmethod
     def convert_measure(measure_dict: dict):
@@ -518,7 +537,8 @@ class LookMLProject:
                             converted["filters"].append({"field": field.lower(), "value": value})
                 else:
                     converted["filters"].append({"field": f["field"].lower(), "value": f["value"]})
-        return converted
+
+        return LookMLProject.sort_dict(converted, FIELD_KEY_ORDER)
 
     @staticmethod
     def _to_identifier(field_name: str, type: str, pair_id: str):
@@ -533,3 +553,9 @@ class LookMLProject:
     def is_lookml_dashboard_file(file):
         suffixes = [".dashboard.lkml", ".dashboard.lookml"]
         return any(file.endswith(suffix) for suffix in suffixes)
+
+    @staticmethod
+    def sort_dict(d: dict, sort_order: list):
+        sorted_dict = {k: d[k] for k in sort_order if k in d}
+        sorted_dict.update({k: v for k, v in d.items() if k not in sorted_dict})
+        return sorted_dict
