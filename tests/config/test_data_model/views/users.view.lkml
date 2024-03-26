@@ -1,7 +1,8 @@
 view: user_view {
   view_label: "User"
-  sql_table_name: `etl.prod_read_replica.user_view`
-    ;;
+  derived_table: {
+    sql: select * from `etl.prod_read_replica.user_view` ;;
+  }
   drill_fields: [id]
 
   dimension: id {

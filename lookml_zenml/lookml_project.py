@@ -247,7 +247,7 @@ class LookMLProject:
             zenml_view["sql_table_name"] = view["sql_table_name"]
 
         if "derived_table" in view:
-            zenml_view["derived_table"]["sql"] = view["derived_table"]["sql"]
+            zenml_view["derived_table"] = {"sql": view["derived_table"]["sql"]}
 
         dimensions = [
             f for field in view.get("dimensions", []) if (f := LookMLProject.convert_dimension(field))
