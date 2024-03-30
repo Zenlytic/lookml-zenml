@@ -36,7 +36,7 @@ def test_convert_model_join_resolution():
         lkml_result["name"] = "testing_model"
 
     metadata_result = LookMLProject.convert_model(lkml_result, generate_view_metadata=True)
-    view_metadata = metadata_result["view_metadata"]
+    view_metadata = metadata_result["view_metadata"]["graph"]
 
     print(view_metadata)
 
@@ -51,7 +51,7 @@ def test_convert_model_join_resolution():
         {"name": "profile_id", "type": "foreign", "sql": "${profile_id}"},
         {"name": "orderdatetime_date", "type": "foreign", "sql": "${orderdatetime_date}"},
     ]
-    assert view_metadata["session_to_profile_view"] == [
+    assert view_metadata["session_to_profile"] == [
         {"name": "profile_id", "type": "foreign", "sql": "${user_id}"},
         {"name": "session_id", "type": "primary", "sql": "${session}"},
     ]
@@ -65,7 +65,7 @@ def test_convert_model_join_resolution():
     assert view_metadata["marketing_spend_daily"] == [
         {"name": "orderdatetime_date", "type": "foreign", "sql": "${date_date}"}
     ]
-    assert view_metadata["all_visitors_view"] == [
+    assert view_metadata["all_visitors"] == [
         {"name": "session_id", "type": "primary", "sql": "${session_id}"}
     ]
     assert view_metadata["zendesk_tickets"] == [

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lookml-zenml"
-version = "0.1.4"
+version = "0.1.5"
 description = ""
 authors = ["Paul Blankley <paul@zenlytic.com>"]
 readme = "README.md"

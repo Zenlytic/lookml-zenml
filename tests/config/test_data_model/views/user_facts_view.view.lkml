@@ -129,6 +129,11 @@ view: profile_facts_view {
     sql: ${TABLE}.total_orders ;;
   }
 
+  measure: mrr {
+    description: "MRR"
+    type: sum
+    sql: ${TABLE}.mrr ;;
+  }
 
   measure: count_profiles {
     description: "count of profile id's"

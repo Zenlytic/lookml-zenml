@@ -18,6 +18,7 @@ class LookMLProject:
         self.field_mappings = []
         self._views = []
         self._models = []
+        self._explore_from_mapping = {}
 
     def convert(self):
         if not self.in_directory:
@@ -42,8 +43,9 @@ class LookMLProject:
         for raw_model in lookml_project["models"]:
             model = self.convert_model(raw_model, generate_view_metadata=True)
             model_view_metadata = model.pop("view_metadata", {})
-            view_metadata.update(model_view_metadata)
-            for view_name in set(model_view_metadata.keys()):
+            self._explore_from_mapping[model["name"]] = model_view_metadata["explore_from_mapping"]
+            view_metadata.update(model_view_metadata["graph"])
+            for view_name in set(model_view_metadata["graph"].keys()):
                 views_to_models[view_name] = model["name"]
             models.append(model)
         self._models = models
@@ -123,10 +125,16 @@ class LookMLProject:
     def get_view_metadata(model: dict) -> dict:
         explores = model.get("explores", [])
 
+        explore_from_mapping = defaultdict(dict)
         identifier_graph = defaultdict(lambda: defaultdict(list))
         for explore in explores:
+            if "from" in explore:
+                explore_from_mapping[explore["name"]][explore["name"]] = explore["from"]
+
             root_view = explore["name"] if "from" not in explore else explore["from"]
             for join in explore.get("joins", []):
+                if "from" in join:
+                    explore_from_mapping[explore["name"]][join["name"]] = join["from"]
                 pair_id = str(uuid.uuid4())
                 join_view = join["name"] if "from" not in join else join["from"]
 
@@ -141,6 +149,8 @@ class LookMLProject:
                     if join_type == "identifier":
                         for reference in references:
                             view_name, field_name = reference.split(".")
+                            if view_name in explore_from_mapping[explore["name"]]:
+                                view_name = explore_from_mapping[explore["name"]][view_name]
                             identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             identifier_graph[view_name][identifier["sql"]].append(identifier)
 
@@ -154,6 +164,8 @@ class LookMLProject:
                                 identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             else:
                                 identifier = LookMLProject._to_identifier(field_name, "foreign", pair_id)
+                            if view_name in explore_from_mapping[explore["name"]]:
+                                view_name = explore_from_mapping[explore["name"]][view_name]
                             identifier_graph[view_name][identifier["sql"]].append(identifier)
 
                 # We do not want to replicate many_to_many joins since they get out of hand quickly
@@ -166,6 +178,8 @@ class LookMLProject:
                     if join_type == "identifier":
                         for reference in references:
                             view_name, field_name = reference.split(".")
+                            if view_name in explore_from_mapping[explore["name"]]:
+                                view_name = explore_from_mapping[explore["name"]][view_name]
                             if view_name == join_view:
                                 identifier = LookMLProject._to_identifier(field_name, "primary", pair_id)
                             else:
@@ -210,7 +224,7 @@ class LookMLProject:
                         if identifier not in resolved_id_graph[view]:
                             resolved_id_graph[view].append(identifier)
 
-        return resolved_id_graph
+        return {"graph": resolved_id_graph, "explore_from_mapping": explore_from_mapping}
 
     @staticmethod
     def _get_pair(pair_id, id_graph):
@@ -303,30 +317,50 @@ class LookMLProject:
             zenml_element["title"] = element["title"]
 
         # Add fields
+        if "fields" not in element:
+            return None
+
         for f in element["fields"]:
-            field = self._get_field(f, self._views)
+            field = self._get_field(
+                f, self._views, model_name=element.get("model"), explore_name=element.get("explore")
+            )
             if field["field_type"] == "measure":
-                zenml_element["metrics"].append(f)
+                zenml_element["metrics"].append(field["id"])
             else:
-                zenml_element["slice_by"].append(f)
+                zenml_element["slice_by"].append(field["id"])
 
         if "pivots" in element:
-            zenml_element["pivot_by"] = element["pivots"]
+            zenml_element["pivot_by"] = []
+            for p in element["pivots"]:
+                field = self._get_field(
+                    p, self._views, model_name=element.get("model"), explore_name=element.get("explore")
+                )
+                zenml_element["pivot_by"].append(field["id"])
 
         if "filters" in element:
             zenml_element["filters"] = []
             for k, v in element["filters"].items():
-                zenml_element["filters"].append({"field": k.lower(), "value": v})
+                field = self._get_field(
+                    k, self._views, model_name=element.get("model"), explore_name=element.get("explore")
+                )
+                if v != "":
+                    zenml_element["filters"].append({"field": field["id"].lower(), "value": v})
 
         if "sorts" in element:
             zenml_element["sort"] = []
             for sort_str in element["sorts"]:
                 split_str = sort_str.split(" ")
+                field = self._get_field(
+                    split_str[0],
+                    self._views,
+                    model_name=element.get("model"),
+                    explore_name=element.get("explore"),
+                )
                 if len(split_str) == 1:
-                    zenml_element["sort"].append({"field": split_str[0].lower(), "value": "asc"})
+                    zenml_element["sort"].append({"field": field["id"].lower(), "value": "asc"})
                 else:
                     zenml_element["sort"].append(
-                        {"field": split_str[0].lower(), "value": split_str[1].lower()}
+                        {"field": field["id"].lower(), "value": split_str[1].lower()}
                     )
 
         if "show_totals" in element:
@@ -344,7 +378,7 @@ class LookMLProject:
                 zenml_element["table_calculations"].append(
                     {
                         "title": dynamic_field["label"],
-                        "formula": self._clean_table_calc(dynamic_field["expression"]),
+                        "formula": self._clean_table_calc(dynamic_field["expression"], element=element),
                         "format": dynamic_field.get("value_format_name", "decimal_1"),
                     }
                 )
@@ -361,6 +395,9 @@ class LookMLProject:
 
         if element.get("type") == "looker_column":
             plot = "grouped_bar" if len(zenml_element["slice_by"]) > 1 else "bar"
+            if element.get("stacking", "") == "normal":
+                plot_options = {"grouped_bar": {"display_type": "STACKED"}}
+                zenml_element["plot_options"] = plot_options
             zenml_element["plot_type"] = plot
         elif element.get("type") == "looker_line":
             "line" or "multi_line"
@@ -373,19 +410,41 @@ class LookMLProject:
 
         return zenml_element
 
-    def _get_field(self, field_id: str, views: list):
+    def _get_field(self, field_id: str, views: list, model_name: str = None, explore_name: str = None):
+        if len(field_id.split(".")) == 2 and model_name and explore_name:
+            explore_view_name, field_name = field_id.split(".")
+            if explore_view_name in self._explore_from_mapping.get(model_name, {}).get(explore_name, {}):
+                explore_view_name = self._explore_from_mapping[model_name][explore_name][explore_view_name]
+            field_id = f"{explore_view_name}.{field_name}"
+
         for v in views:
             for f in v["fields"]:
                 if f"{v['name']}.{f['name']}" == field_id.lower() and f["field_type"] != "dimension_group":
-                    return f
+                    return {**f, "id": field_id}
                 elif f"{v['name']}.{f['name']}" in field_id.lower() and f["field_type"] == "dimension_group":
-                    return f
+                    return {**f, "id": field_id}
         # If we can't find the field assume it will be a dimension on a dashboard
-        return {"field_type": "dimension"}
+        return {"field_type": "dimension", "id": field_id}
 
-    def _clean_table_calc(self, formula: str):
+    def _clean_table_calc(self, formula: str, element: dict = {}):
         for field_to_replace in self.fields_to_replace(formula):
-            formula = formula.replace(f"${{{field_to_replace}}}", f"[{field_to_replace}]")
+            if ":row_total" in field_to_replace:
+                field_id = field_to_replace.split(":row_total")[0]
+                field = self._get_field(
+                    field_id,
+                    self._views,
+                    model_name=element.get("model"),
+                    explore_name=element.get("explore"),
+                )
+                formula = formula.replace(f"${{{field_to_replace}}}", f"sum([{field['id']}])")
+            else:
+                field = self._get_field(
+                    field_to_replace,
+                    self._views,
+                    model_name=element.get("model"),
+                    explore_name=element.get("explore"),
+                )
+                formula = formula.replace(f"${{{field_to_replace}}}", f"[{field['id']}]")
         return formula
 
     def _translate_merged_queries_element(self, element: dict):

@@ -33,11 +33,12 @@ explore: user_view {
     sql_on: ${user_view.id} = ${orders_view.profile_id} ;;
   }
 
-  join: last_touch_attribution_view {
+  join: lta_view {
+    from: last_touch_attribution_view
     view_label: "Last Touch Attribution"
     type: left_outer
     relationship: many_to_one
-    sql_on: ${last_touch_attribution_view.profile_id} = ${orders_view.profile_id}  ;;
+    sql_on: ${lta_view.profile_id} = ${orders_view.profile_id}  ;;
   }
 
 

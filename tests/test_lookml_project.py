@@ -21,11 +21,11 @@ def test_lookml_project_convert_project():
 
     models, views, dashboards = project.convert_project(project_dict)
 
-    print(models)
-    print()
-    print(views)
-    print()
-    print(dashboards)
+    # print(models)
+    # print()
+    # print(views)
+    # print()
+    # print(dashboards)
 
     assert len(models) == 1
     assert models[0]["name"] == "testing_model"
@@ -33,5 +33,27 @@ def test_lookml_project_convert_project():
     assert len(views) == 9
     assert views[0]["name"] == "last_touch_attribution_view"
 
-    assert len(dashboards) == 2
+    assert len(dashboards) == 3
     assert dashboards[0]["name"] == "funnel_conversion_data"
+    assert dashboards[2]["name"] == "monthly_kpis_dashboard"
+    assert dashboards[2]["elements"][0]["title"] == "Total MRR"
+
+    # Remove the empty filters
+    assert len(dashboards[2]["elements"][1]["filters"]) == 1
+    assert dashboards[2]["elements"][0]["plot_options"] == {"grouped_bar": {"display_type": "STACKED"}}
+    assert dashboards[2]["elements"][1]["filters"][0]["field"] == "last_touch_attribution_view.utm_content"
+    assert dashboards[2]["elements"][1]["pivot_by"][0] == "last_touch_attribution_view.utm_medium"
+    assert dashboards[2]["elements"][1]["sort"][0] == {
+        "field": "last_touch_attribution_view.utm_medium",
+        "value": "asc",
+    }
+    assert dashboards[2]["elements"][1]["table_calculations"][0] == {
+        "title": "Total MoM",
+        "formula": "sum([last_touch_attribution_view.count])/offset(sum([last_touch_attribution_view.count]),1)\n-1",  # noqa
+        "format": "percent_1",
+    }
+
+    assert dashboards[2]["elements"][0]["slice_by"] == [
+        "profile_facts_view.first_ship_month",
+        "last_touch_attribution_view.utm_medium",
+    ]

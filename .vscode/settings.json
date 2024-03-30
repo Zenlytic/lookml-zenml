@@ -1,19 +1,9 @@
 {
   "editor.formatOnSave": true,
-  "python.linting.pylintEnabled": false,
-  "python.linting.flake8Enabled": true,
-  "python.linting.flake8Path": "./.venv/bin/flake8",
-  "python.linting.flake8Args": [
-    "--ignore=B006,E203,W504,W503,B010,E711,E402,F541",
-    "--max-line-length=110"
-  ],
-  "python.linting.enabled": true,
-  "python.formatting.provider": "black",
-  "python.formatting.blackArgs": [
-    "--line-length=110"
-  ],
-  "python.formatting.blackPath": "./.venv/bin/black",
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
-  }
+  },
+  "black-formatter.args": ["--config", "pyproject.toml"],
+  "black-formatter.importStrategy": "fromEnvironment",
+  "flake8.args": ["--config=.flake8"]
 }
