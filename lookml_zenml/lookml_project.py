@@ -1,6 +1,7 @@
 import re
 import os
 import lkml
+import json
 from ruamel.yaml import YAML
 import uuid
 from collections import defaultdict
@@ -19,6 +20,7 @@ class LookMLProject:
         self._views = []
         self._models = []
         self._explore_from_mapping = {}
+        self._default_model_name = None
 
     def convert(self):
         if not self.in_directory:
@@ -50,13 +52,13 @@ class LookMLProject:
             models.append(model)
         self._models = models
 
-        default_model_name = models[0]["name"]
+        self._default_model_name = models[0]["name"]
         for raw_view in lookml_project["views"]:
             # We don't currently get access filters from the explores
             # because they vary across explores for the same view
             view = self.convert_view(
                 raw_view,
-                views_to_models.get(raw_view["name"], default_model_name),
+                views_to_models.get(raw_view["name"], self._default_model_name),
                 access_filters=[],
                 joins=view_metadata.get(raw_view["name"], []),
             )
@@ -294,6 +296,14 @@ class LookMLProject:
         if "description" in dashboard:
             zenml_data["description"] = dashboard["description"]
 
+        if "filters" in dashboard:
+            zenml_data["filters"] = []
+            for f in dashboard["filters"]:
+                field = self._get_field(
+                    f["field"], self._views, model_name=f.get("model"), explore_name=f.get("explore")
+                )
+                zenml_data["filters"].append({"field": field["id"], "value": f.get("default_value")})
+
         for element in dashboard["elements"]:
             zenml_element = self._translate_dashboard_element(element)
             if zenml_element:
@@ -309,8 +319,28 @@ class LookMLProject:
     def _translate_vanilla_element(self, element: dict):
         # We do not support conditional formatting in dashboards
         # We do not support non-query elements yet, either
-        if "model" not in element:
+        if "model" not in element and element.get("type") not in {"button", "text"}:
             return None
+
+        elif element.get("type") == "text":
+            model_name = self._default_model_name if self._default_model_name else "todo"
+            zenml_element = {"model": model_name, "type": "markdown", "size": "quarter"}
+            zenml_element["content"] = element.get("body_text", "")
+            return zenml_element
+
+        elif element.get("type") == "button":
+            model_name = self._default_model_name if self._default_model_name else "todo"
+            zenml_element = {"model": model_name, "type": "markdown", "size": "quarter"}
+            content_json = json.loads(element.get("rich_content_json", "{}"))
+            link_url = content_json.get("href", "")
+
+            if link_text := content_json.get("text", ""):
+                content = f"[{link_text}]({link_url})"
+            else:
+                content = link_url
+
+            zenml_element["content"] = content
+            return zenml_element
 
         zenml_element = {"model": element["model"], "metrics": [], "slice_by": []}
         if "title" in element:

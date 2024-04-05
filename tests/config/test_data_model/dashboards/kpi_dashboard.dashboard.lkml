@@ -22,7 +22,7 @@
 
   - type: button
     name: button_2541
-    rich_content_json: '{"text":"MRR","description":"Deep Dives","newTab":true,"alignment":"center","size":"large","style":"FILLED","color":"#000000","href":"fake"}'
+    rich_content_json: '{"text":"MRR","description":"Deep Dives","newTab":true,"alignment":"center","size":"large","style":"FILLED","color":"#000000","href":"https://google.com"}'
     row: 0
     col: 0
     width: 24
@@ -158,3 +158,19 @@
     col: 0
     width: 12
     height: 8
+  - name: ''
+    type: text
+    title_text: ''
+    subtitle_text: ''
+    body_text: |-
+      <font color="MidnightBlue" size="5">
+      <center>
+
+      MRR Movements
+
+      </center>
+      </font>
+    row: 58
+    col: 0
+    width: 24
+    height: 2
