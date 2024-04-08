@@ -98,6 +98,33 @@
     limit: 500
     column_limit: 50
     dynamic_fields:
+    - category: dimension
+      description: ''
+      label: Attribution
+      value_format:
+      value_format_name:
+      calculation_type: group_by
+      dimension: attribution
+      args:
+      - lta_view.utm_channel
+      - - label: Marketing
+          filter: Referrals,Unknown,Paid
+        - label: Email
+          filter: Email
+        - label: Affiliate
+          filter: Affiliate
+      -
+      _kind_hint: dimension
+      _type_hint: string
+    - category: measure
+      label: Unique mediums
+      based_on: lta_view.utm_medium
+      _kind_hint: measure
+      measure: utm_medium_1
+      type: count_distinct
+      _type_hint: number
+      filters:
+        lta_view.utm_channel: Referrals,Unknown,Paid
     - category: table_calculation
       expression: |-
         ${lta_view.count:row_total}/offset(${lta_view.count:row_total},1)

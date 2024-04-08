@@ -46,9 +46,9 @@ def test_convert_dashboard():
 
     # This is not correct, but this test shows we do NOT support the custom measures / dimensions yet
     assert table_calc_element["table_calculations"][0] == {
-        "title": "total converted",
-        "formula": None,
-        "format": None,
+        "format": "percent_2",
+        "formula": "[total_converted]/[count_joined]",
+        "title": "bottom of funnel",
     }
 
 

@@ -405,13 +405,15 @@ class LookMLProject:
         if "dynamic_fields" in element:
             zenml_element["table_calculations"] = []
             for dynamic_field in element["dynamic_fields"]:
-                zenml_element["table_calculations"].append(
-                    {
-                        "title": dynamic_field["label"],
-                        "formula": self._clean_table_calc(dynamic_field["expression"], element=element),
-                        "format": dynamic_field.get("value_format_name", "decimal_1"),
-                    }
-                )
+                # We do not currently support dynamic fields that are not table calculations
+                if dynamic_field.get("category") == "table_calculation":
+                    zenml_element["table_calculations"].append(
+                        {
+                            "title": dynamic_field["label"],
+                            "formula": self._clean_table_calc(dynamic_field["expression"], element=element),
+                            "format": dynamic_field.get("value_format_name", "decimal_1"),
+                        }
+                    )
 
         plot_lookup = {
             "looker_area": "area",
