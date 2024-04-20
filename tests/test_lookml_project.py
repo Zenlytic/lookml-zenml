@@ -37,12 +37,15 @@ def test_lookml_project_convert_project():
     assert dashboards[0]["name"] == "funnel_conversion_data"
     assert dashboards[2]["name"] == "monthly_kpis_dashboard"
 
-    assert dashboards[2]["filters"] == [{"field": "user_view.is_test", "value": "No"}]
+    assert dashboards[2]["filters"] == [{"field": "user_view.is_test", "value": False}]
 
     assert dashboards[2]["elements"][0]["type"] == "markdown"
     assert dashboards[2]["elements"][0]["size"] == "quarter"
     assert dashboards[2]["elements"][0]["model"] == "testing_model"
     assert dashboards[2]["elements"][0]["content"] == "[MRR](https://google.com)"
+
+    # Make sure this one is ordered correctly, last
+    assert dashboards[2]["elements"][-1]["title"] == "New Web Visitors"
 
     assert dashboards[2]["elements"][1]["title"] == "Total MRR"
     assert dashboards[2]["elements"][1]["plot_options"] == {"grouped_bar": {"display_type": "STACKED"}}
@@ -52,14 +55,14 @@ def test_lookml_project_convert_project():
     ]
 
     # Remove the empty filters
-    assert len(dashboards[2]["elements"][2]["filters"]) == 1
-    assert dashboards[2]["elements"][2]["filters"][0]["field"] == "last_touch_attribution_view.utm_content"
-    assert dashboards[2]["elements"][2]["pivot_by"][0] == "last_touch_attribution_view.utm_medium"
-    assert dashboards[2]["elements"][2]["sort"][0] == {
+    assert len(dashboards[2]["elements"][-1]["filters"]) == 1
+    assert dashboards[2]["elements"][-1]["filters"][0]["field"] == "last_touch_attribution_view.utm_content"
+    assert dashboards[2]["elements"][-1]["pivot_by"][0] == "last_touch_attribution_view.utm_medium"
+    assert dashboards[2]["elements"][-1]["sort"][0] == {
         "field": "last_touch_attribution_view.utm_medium",
         "value": "asc",
     }
-    assert dashboards[2]["elements"][2]["table_calculations"][0] == {
+    assert dashboards[2]["elements"][-1]["table_calculations"][0] == {
         "title": "Total MoM",
         "formula": "sum([last_touch_attribution_view.count])/offset(sum([last_touch_attribution_view.count]),1)\n-1",  # noqa
         "format": "percent_1",

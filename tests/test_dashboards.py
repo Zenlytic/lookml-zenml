@@ -35,7 +35,7 @@ def test_convert_dashboard():
     assert element["filters"] == [
         {"field": "permanent_session_view.session_date_date", "value": "12 months ago for 12 months"},
         {"field": "permanent_session_view.entry_page", "value": "-%blog%"},
-        {"field": "permanent_session_view.is_bot", "value": "No"},
+        {"field": "permanent_session_view.is_bot", "value": False},
     ]
     assert element["sort"] == [{"field": "permanent_session_view.session_date_month", "value": "desc"}]
     assert not element["show_annotations"]

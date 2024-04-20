@@ -302,9 +302,15 @@ class LookMLProject:
                 field = self._get_field(
                     f["field"], self._views, model_name=f.get("model"), explore_name=f.get("explore")
                 )
-                zenml_data["filters"].append({"field": field["id"], "value": f.get("default_value")})
+                default_value = f.get("default_value")
+                if default_value == "No":
+                    default_value = False
+                elif default_value == "Yes":
+                    default_value = True
+                zenml_data["filters"].append({"field": field["id"], "value": default_value})
 
-        for element in dashboard["elements"]:
+        sorted_elements = sorted(dashboard["elements"], key=lambda x: (x.get("row", 0), x.get("col", 0)))
+        for element in sorted_elements:
             zenml_element = self._translate_dashboard_element(element)
             if zenml_element:
                 zenml_data["elements"].append(zenml_element)
@@ -374,6 +380,10 @@ class LookMLProject:
                     k, self._views, model_name=element.get("model"), explore_name=element.get("explore")
                 )
                 if v != "":
+                    if v == "No":
+                        v = False
+                    elif v == "Yes":
+                        v = True
                     zenml_element["filters"].append({"field": field["id"].lower(), "value": v})
 
         if "sorts" in element:
@@ -393,6 +403,15 @@ class LookMLProject:
                         {"field": field["id"].lower(), "value": split_str[1].lower()}
                     )
 
+        if "width" in element:
+            relative_width = float(element["width"]) / 24
+            if relative_width > 0.5:
+                zenml_element["size"] = "full"
+            elif relative_width > 0.25:
+                zenml_element["size"] = "half"
+            else:
+                zenml_element["size"] = "quarter"
+
         if "show_totals" in element:
             zenml_element["show_totals"] = bool(element["show_totals"])
 
@@ -406,7 +425,9 @@ class LookMLProject:
             zenml_element["table_calculations"] = []
             for dynamic_field in element["dynamic_fields"]:
                 # We do not currently support dynamic fields that are not table calculations
-                if dynamic_field.get("category") == "table_calculation":
+                if dynamic_field.get("category") == "table_calculation" and not dynamic_field.get(
+                    "is_disabled", False
+                ):
                     zenml_element["table_calculations"].append(
                         {
                             "title": dynamic_field["label"],

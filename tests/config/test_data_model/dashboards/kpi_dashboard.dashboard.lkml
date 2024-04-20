@@ -126,6 +126,15 @@
       filters:
         lta_view.utm_channel: Referrals,Unknown,Paid
     - category: table_calculation
+      expression: sum(${lta_view.count})
+      label: Pipeline value
+      value_format:
+      value_format_name: percent_1
+      _kind_hint: supermeasure
+      table_calculation: pipeline_value
+      _type_hint: number
+      is_disabled: true
+    - category: table_calculation
       expression: |-
         ${lta_view.count:row_total}/offset(${lta_view.count:row_total},1)
         -1
