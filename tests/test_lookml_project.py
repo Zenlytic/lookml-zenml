@@ -36,8 +36,11 @@ def test_lookml_project_convert_project():
     assert len(dashboards) == 3
     assert dashboards[0]["name"] == "funnel_conversion_data"
     assert dashboards[2]["name"] == "monthly_kpis_dashboard"
+    assert dashboards[2]["label"] == "Monthly KPIs Dashboard"
 
-    assert dashboards[2]["filters"] == [{"field": "user_view.is_test", "value": False}]
+    assert dashboards[2]["filters"] == [
+        {"field": "user_view.is_test", "name": "Is Test (Yes / No)", "value": False}
+    ]
 
     assert dashboards[2]["elements"][0]["type"] == "markdown"
     assert dashboards[2]["elements"][0]["size"] == "quarter"
@@ -67,3 +70,6 @@ def test_lookml_project_convert_project():
         "formula": "sum([last_touch_attribution_view.count])/offset(sum([last_touch_attribution_view.count]),1)\n-1",  # noqa
         "format": "percent_1",
     }
+
+    assert dashboards[2]["elements"][1]["listen"] == {"Months": "profile_facts_view.first_ship_month"}
+    assert "listen" not in dashboards[2]["elements"][3]

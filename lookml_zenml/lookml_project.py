@@ -307,7 +307,9 @@ class LookMLProject:
                     default_value = False
                 elif default_value == "Yes":
                     default_value = True
-                zenml_data["filters"].append({"field": field["id"], "value": default_value})
+                zenml_data["filters"].append(
+                    {"name": f["name"], "field": field["id"], "value": default_value}
+                )
 
         sorted_elements = sorted(dashboard["elements"], key=lambda x: (x.get("row", 0), x.get("col", 0)))
         for element in sorted_elements:
@@ -324,7 +326,6 @@ class LookMLProject:
 
     def _translate_vanilla_element(self, element: dict):
         # We do not support conditional formatting in dashboards
-        # We do not support non-query elements yet, either
         if "model" not in element and element.get("type") not in {"button", "text"}:
             return None
 
@@ -385,6 +386,9 @@ class LookMLProject:
                     elif v == "Yes":
                         v = True
                     zenml_element["filters"].append({"field": field["id"].lower(), "value": v})
+
+        if "listen" in element:
+            zenml_element["listen"] = element["listen"]
 
         if "sorts" in element:
             zenml_element["sort"] = []
