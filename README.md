@@ -1,6 +1,6 @@
 # LookML to ZenML
 
-Library for translating LookML configuration into ZenML for easy onboarding to Zenlytic.
+Library for translating LookML configuration into ZenML for easy onboarding to Zenlytic. You can find a web-hosted version [here](https://lookml-zenml.netlify.app/).
 
 To install the package run 
 
