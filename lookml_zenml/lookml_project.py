@@ -698,6 +698,10 @@ class LookMLProjectConverter:
             converted["type"] = dimension.type
         else:
             converted["type"] = "string"
+
+        if converted["type"] == "string":
+            converted["searchable"] = True
+
         if dimension.links:
             converted["link"] = dimension.links[0].url
 

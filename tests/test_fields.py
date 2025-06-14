@@ -67,7 +67,7 @@ def test_dimension_conversion(lkml_dimension):
     elif lkml_dimension["name"] == "id":
         correct = {**lkml_dimension, "primary_key": True}
     elif lkml_dimension["name"] == "carrier":
-        correct = {**lkml_dimension, "type": "string"}
+        correct = {**lkml_dimension, "type": "string", "searchable": True}
     correct["field_type"] = "dimension"
 
     assert converted == correct
