@@ -5,7 +5,8 @@ import click
 import lkml
 import yaml
 
-from .lookml_project import LookMLProject
+from .lookml_project import LookMLProjectConverter
+from .lookml_models import LookMLView, LookMLModel
 
 
 def _convert_logic(path: str, directory: str, out_directory: str, convert_type: str):
@@ -24,15 +25,17 @@ def _convert_logic(path: str, directory: str, out_directory: str, convert_type: 
                 o["name"] = path.split(".")[-3].split("/")[-1]
             key = "name" if convert_type != "dashboard" else "dashboard"
             object_names.append(o[key])
-        project = LookMLProject(in_directory=directory)
+        project = LookMLProjectConverter(in_directory=directory)
         lookml_project = project.load(project.in_directory)
-        models, views, dashboards = project.convert_project(lookml_project)
+        models, views, dashboards, topics = project.convert_project(lookml_project)
         if convert_type == "dashboard":
             objects = dashboards
         elif convert_type == "model":
             objects = models
         elif convert_type == "view":
             objects = views
+        elif convert_type == "topic":
+            objects = topics
         else:
             raise ValueError(f"Unknown convert_type {convert_type}")
         result_objects = [o for o in objects if o["name"] in object_names]
@@ -45,10 +48,14 @@ def _convert_logic(path: str, directory: str, out_directory: str, convert_type: 
             for o in to_loop:
                 if convert_type == "model":
                     o["name"] = path.split(".")[-3].split("/")[-1]
-                    model = LookMLProject().convert_model(o)
+                    model = LookMLProjectConverter().convert_model(LookMLModel.from_dict(o))
                     result_objects.append(model)
                 elif convert_type == "view":
-                    result_objects.append(LookMLProject().convert_view(o, model_name="TODO add model name"))
+                    result_objects.append(
+                        LookMLProjectConverter().convert_view(
+                            LookMLView.from_dict(o), model_name="TODO add model name"
+                        )
+                    )
 
     if out_directory:
         for o in result_objects:
@@ -56,9 +63,13 @@ def _convert_logic(path: str, directory: str, out_directory: str, convert_type: 
                 ext = "_model.yml"
             elif convert_type == "view":
                 ext = "_view.yml"
+            elif convert_type == "topic":
+                ext = "_topic.yml"
             else:
                 ext = ".yml"
             with open(os.path.join(os.path.abspath(out_directory), f'{o["name"]}{ext}'), "w") as f:
+                if convert_type == "topic":
+                    o.pop("name")
                 yaml.dump(o, f)
     else:
         return result_objects
@@ -111,7 +122,7 @@ def convert(directory: str, out_directory: str):
     """Convert a LookML dashboard to a ZenML view with context from the project"""
     if not out_directory:
         raise ValueError("--out-directory is a required option")
-    project = LookMLProject(in_directory=directory, out_directory=out_directory)
+    project = LookMLProjectConverter(in_directory=directory, out_directory=out_directory)
     project.convert()
     click.echo(f"Project converted and saved to {out_directory}")
 
