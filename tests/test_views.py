@@ -2,7 +2,8 @@ import pytest
 import lkml
 import os
 from .conftest import DATA_MODEL_DIRECTORY
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
+from lookml_zenml.lookml_models import LookMLView
 
 
 @pytest.mark.unit
@@ -12,7 +13,7 @@ def test_parse_model_from_file_path():
         lkml_result = lkml.load(file)
 
     lkml_view = lkml_result["views"][0]
-    result = LookMLProject.convert_view(lkml_view, model_name="test_model")
+    result = LookMLProjectConverter.convert_view(LookMLView.from_dict(lkml_view), model_name="test_model")
 
     # View level checks
     assert result["version"] == 1
@@ -22,7 +23,6 @@ def test_parse_model_from_file_path():
     assert "description" not in result
     assert result["model_name"] == "test_model"
     assert result["required_access_grants"] == []
-    assert result["row_label"] == "Orders View"
     assert result["sets"] == []
     assert result["access_filters"] == []
     assert result["identifiers"] == []

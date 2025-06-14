@@ -2,7 +2,8 @@ import pytest
 import lkml
 import os
 from .conftest import DATA_MODEL_DIRECTORY
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
+from lookml_zenml.lookml_models import LookMLModel
 
 
 @pytest.mark.unit
@@ -12,7 +13,9 @@ def test_convert_model():
         lkml_result = lkml.load(file)
         lkml_result["name"] = "testing_model"
 
-    result = LookMLProject.convert_model(lkml_result, generate_view_metadata=False)
+    result = LookMLProjectConverter.convert_model(
+        LookMLModel.from_dict(lkml_result), generate_view_metadata=False
+    )
 
     assert result["version"] == 1
     assert result["type"] == "model"
@@ -35,7 +38,9 @@ def test_convert_model_join_resolution():
         lkml_result = lkml.load(file)
         lkml_result["name"] = "testing_model"
 
-    metadata_result = LookMLProject.convert_model(lkml_result, generate_view_metadata=True)
+    metadata_result = LookMLProjectConverter.convert_model(
+        LookMLModel.from_dict(lkml_result), generate_view_metadata=True
+    )
     view_metadata = metadata_result["view_metadata"]["graph"]
 
     print(view_metadata)

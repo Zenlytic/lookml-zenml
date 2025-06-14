@@ -1,5 +1,10 @@
 import pytest
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
+from lookml_zenml.lookml_models import (
+    LookMLDimension,
+    LookMLDimensionGroup,
+    LookMLMeasure,
+)
 
 
 @pytest.mark.unit
@@ -45,18 +50,20 @@ from lookml_zenml.lookml_project import LookMLProject
             "name": "carrier",
             "description": "Mail carrier responsible for delivery of package",
             "sql": "${TABLE}.carrier",
+            "required_access_grants": ["test_access_grant"],
         },
     ],
 )
 def test_dimension_conversion(lkml_dimension):
-    converted = LookMLProject.convert_dimension(lkml_dimension)
+    converted = LookMLProjectConverter.convert_dimension(LookMLDimension.from_dict(lkml_dimension))
 
     if lkml_dimension["name"] in {"first_or_recurring_legit_order"}:
         correct = {**lkml_dimension, "hidden": True, "type": "string"}
     elif lkml_dimension["name"] == "legit_order_sequence":
         correct = {**lkml_dimension, "hidden": False}
     elif lkml_dimension["name"] == "discount_percent_tier":
-        correct = {**lkml_dimension, "tiers": [1, 11, 21, 31, 41, 51], "hidden": True}
+        base_values = {k: v for k, v in lkml_dimension.items() if k != "style"}
+        correct = {**base_values, "tiers": [1, 11, 21, 31, 41, 51], "hidden": True}
     elif lkml_dimension["name"] == "id":
         correct = {**lkml_dimension, "primary_key": True}
     elif lkml_dimension["name"] == "carrier":
@@ -92,11 +99,14 @@ def test_dimension_conversion(lkml_dimension):
             "sql": "${TABLE}.orderdatetime",
             "convert_tz": "yes",
             "name": "orderdatetime",
+            "required_access_grants": ["test_access_grant"],
         }
     ],
 )
 def test_dimension_group_conversion(lkml_dimension_group):
-    converted = LookMLProject.convert_dimension_group(lkml_dimension_group)
+    converted = LookMLProjectConverter.convert_dimension_group(
+        LookMLDimensionGroup.from_dict(lkml_dimension_group)
+    )
 
     if lkml_dimension_group["name"] == "orderdatetime":
         correct = {**lkml_dimension_group, "convert_tz": True}
@@ -140,6 +150,7 @@ def test_dimension_group_conversion(lkml_dimension_group):
             "value_format_name": "percent_2",
             "hidden": "yes",
             "name": "discount_percent",
+            "required_access_grants": ["test_access_grant"],
         },
         {
             "label": "Distinct Purchasers",
@@ -170,7 +181,7 @@ def test_dimension_group_conversion(lkml_dimension_group):
     ],
 )
 def test_measure_conversion(lkml_measure):
-    converted = LookMLProject.convert_measure(lkml_measure)
+    converted = LookMLProjectConverter.convert_measure(LookMLMeasure.from_dict(lkml_measure))
 
     if lkml_measure["name"] in {"latest_order", "first_order"}:
         correct = {}

@@ -9,7 +9,6 @@ sql_table_name: table_name
 derived_table:
   sql: "SQL query"
 default_date: replace_with_date_dimension
-row_label: replace_with_logical_row_label
 
 sets:
   - name: set_name

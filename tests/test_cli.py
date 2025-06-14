@@ -7,7 +7,7 @@ from lookml_zenml.cli import view, model, dashboard, convert
 
 
 from .conftest import DATA_MODEL_DIRECTORY
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
 
 
 @pytest.mark.cli
@@ -51,15 +51,16 @@ def test_convert_view_cli():
 def test_convert_project_cli(monkeypatch):
     yaml_dump_called = False
 
-    def assert_called(cls, out_directory, models, views, dashboards):
+    def assert_called(cls, out_directory, models, views, dashboards, topics):
         nonlocal yaml_dump_called
         yaml_dump_called = True
         assert isinstance(models, list)
         assert isinstance(views, list)
         assert isinstance(dashboards, list)
+        assert isinstance(topics, list)
         assert out_directory == "temp/"
 
-    monkeypatch.setattr(LookMLProject, "dump", assert_called)
+    monkeypatch.setattr(LookMLProjectConverter, "dump", assert_called)
     runner = CliRunner()
     result = runner.invoke(convert, [DATA_MODEL_DIRECTORY, "--out_directory", "temp/"])
 

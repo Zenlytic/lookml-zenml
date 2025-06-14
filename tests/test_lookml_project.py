@@ -1,11 +1,11 @@
 import pytest
 from .conftest import ALL_FIELDS_DIRECTORY, DATA_MODEL_DIRECTORY
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
 
 
 @pytest.mark.unit
 def test_lookml_project_load():
-    project = LookMLProject()
+    project = LookMLProjectConverter()
     project_dict = project.load(in_directory=ALL_FIELDS_DIRECTORY)
 
     assert project_dict["models"][0]["name"] == "model_with_all_fields"
@@ -16,10 +16,10 @@ def test_lookml_project_load():
 
 @pytest.mark.unit
 def test_lookml_project_convert_project():
-    project = LookMLProject()
+    project = LookMLProjectConverter()
     project_dict = project.load(in_directory=DATA_MODEL_DIRECTORY)
 
-    models, views, dashboards = project.convert_project(project_dict)
+    models, views, dashboards, topics = project.convert_project(project_dict)
 
     # print(models)
     # print()

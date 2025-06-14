@@ -2,7 +2,8 @@ import pytest
 import yaml
 import os
 from .conftest import DATA_MODEL_DIRECTORY
-from lookml_zenml.lookml_project import LookMLProject
+from lookml_zenml.lookml_project import LookMLProjectConverter
+from lookml_zenml.lookml_models import LookMLDashboard
 
 
 @pytest.mark.unit
@@ -12,9 +13,9 @@ def test_convert_dashboard():
         lkml_result = yaml.safe_load(file)
 
     print(lkml_result[0])
-    project = LookMLProject()
+    project = LookMLProjectConverter()
     # All results will be tagged as dimensions because we don't have any views to reference
-    result = project.convert_dashboard(lkml_result[0])
+    result = project.convert_dashboard(LookMLDashboard.from_dict(lkml_result[0]))
 
     print()
     print()
@@ -59,9 +60,9 @@ def test_convert_dashboard_funnel():
         lkml_result = yaml.safe_load(file)
 
     print(lkml_result[0])
-    project = LookMLProject()
+    project = LookMLProjectConverter()
     # All results will be tagged as dimensions because we don't have any views to reference
-    result = project.convert_dashboard(lkml_result[0])
+    result = project.convert_dashboard(LookMLDashboard.from_dict(lkml_result[0]))
 
     print()
     print()
