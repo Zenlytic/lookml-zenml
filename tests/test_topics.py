@@ -1,7 +1,7 @@
 import pytest
 from .conftest import DATA_MODEL_DIRECTORY
 from lookml_zenml.lookml_project import LookMLProjectConverter
-from lookml_zenml.lookml_models import LookMLExplore, LookMLExploreFrom
+from lookml_zenml.lookml_models import LookMLExplore
 
 
 @pytest.mark.unit
@@ -114,6 +114,53 @@ def test_topic_joins_conversion():
     orders_join = views_config["orders_view"]["join"]
     assert orders_join["join_type"] == "left_outer"
     assert orders_join["relationship"] == "one_to_many"
+
+
+@pytest.mark.unit
+def test_topic_field_alias_replacement():
+    """Test that field aliases are correctly replaced with actual view names in join sql_on clauses."""
+    project = LookMLProjectConverter()
+    project_dict = project.load(in_directory=DATA_MODEL_DIRECTORY)
+
+    models, views, dashboards, topics = project.convert_project(project_dict)
+
+    # Find user_view topic which has a join with alias replacement
+    user_topic = next(t for t in topics if t["name"] == "user_view")
+
+    # The lta_view join uses 'from: last_touch_attribution_view' creating an alias
+    # The sql_on should have field references properly resolved
+    lta_join = user_topic["views"]["lta_view"]["join"]
+    sql_on = lta_join["sql_on"]
+
+    # The original sql_on is: ${lta_view.profile_id} = ${orders_view.profile_id}
+    # Since lta_view is an alias for last_touch_attribution_view, the field reference
+    # should be replaced with the actual view name
+    assert "${last_touch_attribution_view.profile_id}" in sql_on
+    assert "${orders_view.profile_id}" in sql_on
+
+    # Find all_visitors_view topic which also has alias replacements
+    sessions_topic = next(t for t in topics if t["name"] == "all_visitors_view")
+
+    # Check session_to_profile_view join (from: session_to_profile)
+    session_join = sessions_topic["views"]["session_to_profile_view"]["join"]
+    sql_on = session_join["sql_on"]
+
+    # The original sql_on is: ${all_visitors_view.session_id} = ${session_to_profile_view.session}
+    # all_visitors_view is an alias for all_visitors, session_to_profile_view is alias for session_to_profile
+    assert "${all_visitors.session_id}" in sql_on
+    assert "${session_to_profile.session}" in sql_on
+
+    # Check zendesk_tickets topic for field references without aliases
+    zendesk_topic = next(t for t in topics if t["name"] == "zendesk_tickets")
+
+    # The zendesk_users join should have field references without alias replacement
+    zendesk_users_join = zendesk_topic["views"]["zendesk_users"]["join"]
+    sql_on = zendesk_users_join["sql_on"]
+
+    # Original: ${zendesk_tickets.requester_id}=  ${zendesk_users.user_id}
+    # No aliases involved, so field references should remain unchanged
+    assert "${zendesk_tickets.requester_id}" in sql_on
+    assert "${zendesk_users.user_id}" in sql_on
 
 
 @pytest.mark.unit
@@ -245,8 +292,8 @@ def test_topic_always_filter_conversion():
     topic = LookMLProjectConverter.convert_topic(explore, "test_model")
 
     assert "always_filter" in topic
-    assert topic["always_filter"]["filters"][0]["field"] == "test_field"
-    assert topic["always_filter"]["filters"][0]["value"] == "test_value"
+    assert topic["always_filter"][0]["field"] == "test_field"
+    assert topic["always_filter"][0]["value"] == "test_value"
 
 
 @pytest.mark.unit

@@ -52,13 +52,20 @@ from lookml_zenml.lookml_models import (
             "sql": "${TABLE}.carrier",
             "required_access_grants": ["test_access_grant"],
         },
+        {
+            "name": "zipcode",
+            "description": "Zipcode of the customer",
+            "sql": "${TABLE}.zipcode",
+            "type": "zipcode",
+        },
+        {"name": "customer_name", "type": "string"},
     ],
 )
 def test_dimension_conversion(lkml_dimension):
     converted = LookMLProjectConverter.convert_dimension(LookMLDimension.from_dict(lkml_dimension))
 
     if lkml_dimension["name"] in {"first_or_recurring_legit_order"}:
-        correct = {**lkml_dimension, "hidden": True, "type": "string"}
+        correct = {**lkml_dimension, "hidden": True, "type": "string", "searchable": True}
     elif lkml_dimension["name"] == "legit_order_sequence":
         correct = {**lkml_dimension, "hidden": False}
     elif lkml_dimension["name"] == "discount_percent_tier":
@@ -68,6 +75,10 @@ def test_dimension_conversion(lkml_dimension):
         correct = {**lkml_dimension, "primary_key": True}
     elif lkml_dimension["name"] == "carrier":
         correct = {**lkml_dimension, "type": "string", "searchable": True}
+    elif lkml_dimension["name"] == "zipcode":
+        correct = {**lkml_dimension, "type": "string", "searchable": True}
+    elif lkml_dimension["name"] == "customer_name":
+        correct = {**lkml_dimension, "sql": "${TABLE}.customer_name", "searchable": True}
     correct["field_type"] = "dimension"
 
     assert converted == correct
@@ -100,7 +111,20 @@ def test_dimension_conversion(lkml_dimension):
             "convert_tz": "yes",
             "name": "orderdatetime",
             "required_access_grants": ["test_access_grant"],
-        }
+        },
+        {
+            "type": "date",
+            "timeframes": [
+                "raw",
+                "date",
+                "week",
+                "month",
+                "quarter",
+                "year",
+            ],
+            "sql": "${TABLE}.orderdatetime",
+            "name": "orderdatetime_date",
+        },
     ],
 )
 def test_dimension_group_conversion(lkml_dimension_group):
@@ -110,6 +134,8 @@ def test_dimension_group_conversion(lkml_dimension_group):
 
     if lkml_dimension_group["name"] == "orderdatetime":
         correct = {**lkml_dimension_group, "convert_tz": True}
+    elif lkml_dimension_group["name"] == "orderdatetime_date":
+        correct = {**lkml_dimension_group, "type": "time"}
     correct["field_type"] = "dimension_group"
 
     assert converted == correct

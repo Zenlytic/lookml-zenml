@@ -18,6 +18,7 @@ from lookml_zenml.lookml_models import (
     LookMLDimensionGroup,
     LookMLMeasure,
     LookMLDashboardElement,
+    fields_to_replace,
 )
 
 FIELD_KEY_ORDER = ["name", "field_type", "type", "description", "timeframes", "sql"]
@@ -34,7 +35,8 @@ UNSUPPORTED_MEASURE_TYPES = [
     "yesno",
     "int",
 ]
-
+UNSUPPORTED_DIMENSION_TYPES = ["zipcode"]
+UNSUPPORTED_DIMENSION_GROUP_TYPES = ["date", "datetime"]
 yaml = YAML()
 yaml.indent(sequence=4, offset=2)
 yaml.preserve_quotes = False
@@ -603,10 +605,7 @@ class LookMLProjectConverter:
 
     @staticmethod
     def fields_to_replace(text: str):
-        if text is None:
-            return []
-        matches = re.finditer(r"\$\{(.*?)\}", text, re.MULTILINE)
-        return [match.group(1) for match in matches]
+        return fields_to_replace(text)
 
     def load(self, in_directory: str):
         lookml = {"views": [], "models": [], "dashboards": []}
@@ -680,6 +679,8 @@ class LookMLProjectConverter:
             converted["sql"] = dimension.sql.replace("\\n", "\n")
         elif dimension.case:
             converted["case"] = dimension.case
+        else:
+            converted["sql"] = "${TABLE}." + dimension.name
         if dimension.label:
             converted["label"] = dimension.label
         if dimension.required_access_grants:
@@ -694,7 +695,7 @@ class LookMLProjectConverter:
             converted["primary_key"] = dimension.primary_key == "yes"
         if dimension.tiers:
             converted["tiers"] = [int(tier) for tier in dimension.tiers]
-        if dimension.type:
+        if dimension.type and dimension.type not in UNSUPPORTED_DIMENSION_TYPES:
             converted["type"] = dimension.type
         else:
             converted["type"] = "string"
@@ -718,7 +719,7 @@ class LookMLProjectConverter:
             converted["group_label"] = dimension_group.group_label
         if dimension_group.required_access_grants:
             converted["required_access_grants"] = dimension_group.required_access_grants
-        if dimension_group.type:
+        if dimension_group.type and dimension_group.type not in UNSUPPORTED_DIMENSION_GROUP_TYPES:
             converted["type"] = dimension_group.type
         else:
             converted["type"] = "time"
@@ -827,7 +828,7 @@ class LookMLProjectConverter:
             topic["required_access_grants"] = explore_object.required_access_grants
 
         if explore_object.always_filter:
-            topic["always_filter"] = explore_object.always_filter.model_dump()
+            topic["always_filter"] = explore_object.always_filter.model_dump()["filters"]
 
         if explore_object.conditionally_filter:
             print(

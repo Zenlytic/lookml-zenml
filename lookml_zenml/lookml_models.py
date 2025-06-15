@@ -1,5 +1,13 @@
+import re
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Union, Any, Literal
+
+
+def fields_to_replace(text: str) -> List[str]:
+    if text is None:
+        return []
+    matches = re.finditer(r"\$\{(.*?)\}", text, re.MULTILINE)
+    return [match.group(1) for match in matches]
 
 
 # Pydantic models for LookML structures
@@ -86,7 +94,7 @@ class LookMLDimensionGroup(BaseModel):
     """Pydantic model for LookML dimension group."""
 
     name: str
-    type: Literal["time", "duration"] = "time"
+    type: Literal["time", "date", "datetime", "duration"] = "time"
     primary_key: Optional[str] = None
     sql: Optional[str] = None
     description: Optional[str] = None
@@ -123,7 +131,9 @@ class LookMLFilter(BaseModel):
         return cls(**data)
 
     @classmethod
-    def process_list_of_filters(cls, filters: List[Dict[str, Any]]) -> List["LookMLFilter"]:
+    def process_list_of_filters(
+        cls, filters: List[Dict[str, Any]], alias_to_view_mapping: Dict[str, str] = {}
+    ) -> List["LookMLFilter"]:
         """Process a list of filters and return a list of LookMLFilter objects."""
 
         filter_objects = []
@@ -131,11 +141,24 @@ class LookMLFilter(BaseModel):
             if isinstance(f, list):
                 for sub_filter in f:
                     for field, value in sub_filter.items():
+                        field = LookMLFilter.replace_field_alias_with_view(field, alias_to_view_mapping)
                         filter_objects.append(cls(field=field.lower(), value=value))
             else:
-                filter_objects.append(cls(field=f["field"].lower(), value=f["value"]))
+                field = LookMLFilter.replace_field_alias_with_view(f["field"], alias_to_view_mapping)
+                filter_objects.append(cls(field=field.lower(), value=f["value"]))
 
         return filter_objects
+
+    @staticmethod
+    def replace_field_alias_with_view(field_id: str, alias_to_view_mapping: Dict[str, str]) -> str:
+        """Replace a field alias with the corresponding view name."""
+        if "." in field_id:
+            view_name = field_id.split(".")[0]
+            field_name = field_id.split(".")[1]
+            if view_name in alias_to_view_mapping:
+                view_name = alias_to_view_mapping[view_name]
+                field_id = view_name + "." + field_name
+        return field_id
 
 
 class LookMLMeasure(BaseModel):
@@ -194,8 +217,13 @@ class LookMLAccessFilter(BaseModel):
     user_attribute: str
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LookMLAccessFilter":
+    def from_dict(
+        cls, data: Dict[str, Any], alias_to_view_mapping: Dict[str, str] = {}
+    ) -> "LookMLAccessFilter":
         """Create LookMLAccessFilter from dictionary."""
+        data = data.copy()
+        if "field" in data:
+            data["field"] = LookMLFilter.replace_field_alias_with_view(data["field"], alias_to_view_mapping)
         return cls(**data)
 
 
@@ -266,11 +294,25 @@ class LookMLJoin(BaseModel):
     required_joins: Optional[List[str]] = None
     foreign_key: Optional[str] = None
     sql_table_name: Optional[str] = None
+    sql_where: Optional[str] = None
     required_access_grants: Optional[List[str]] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LookMLJoin":
+    def from_dict(cls, data: Dict[str, Any], alias_to_view_mapping: Dict[str, str] = {}) -> "LookMLJoin":
         """Create LookMLJoin from dictionary."""
+        data = data.copy()
+        if "from" in data and data["from"] != data["name"]:
+            alias_to_view_mapping[data["name"]] = data["from"]
+        if "sql_on" in data:
+            for f in fields_to_replace(data["sql_on"]):
+                new_field = LookMLFilter.replace_field_alias_with_view(f, alias_to_view_mapping)
+                data["sql_on"] = data["sql_on"].replace("${" + f + "}", "${" + new_field + "}")
+        if "sql_where" in data:
+            for f in fields_to_replace(data["sql_where"]):
+                new_field = LookMLFilter.replace_field_alias_with_view(f, alias_to_view_mapping)
+                data["sql_where"] = data["sql_where"].replace("${" + f + "}", "${" + new_field + "}")
+        if "sql_where" in data and "sql_on" in data:
+            data["sql_on"] = data["sql_on"] + " AND " + data["sql_where"]
         return cls(**data)
 
 
@@ -280,14 +322,16 @@ class LookMLAlwaysFilter(BaseModel):
     filters: List[LookMLFilter]
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LookMLAlwaysFilter":
+    def from_dict(
+        cls, data: Dict[str, Any], alias_to_view_mapping: Dict[str, str] = {}
+    ) -> "LookMLAlwaysFilter":
         """Create LookMLAlwaysFilter from dictionary with nested filter conversion."""
         data = data.copy()
 
         # Convert nested filters
         if "filters__all" in data and data["filters__all"]:
             filters = data.pop("filters__all")
-            data["filters"] = LookMLFilter.process_list_of_filters(filters)
+            data["filters"] = LookMLFilter.process_list_of_filters(filters, alias_to_view_mapping)
 
         return cls(**data)
 
@@ -299,13 +343,15 @@ class LookMLConditionallyFilter(BaseModel):
     unless: Optional[List[str]] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LookMLConditionallyFilter":
+    def from_dict(
+        cls, data: Dict[str, Any], alias_to_view_mapping: Dict[str, str] = {}
+    ) -> "LookMLConditionallyFilter":
         """Create LookMLConditionallyFilter from dictionary with nested filter conversion."""
         data = data.copy()
 
         if "filters__all" in data and data["filters__all"]:
             filters = data.pop("filters__all")
-            data["filters"] = LookMLFilter.process_list_of_filters(filters)
+            data["filters"] = LookMLFilter.process_list_of_filters(filters, alias_to_view_mapping)
 
         return cls(**data)
 
@@ -364,28 +410,38 @@ class LookMLExplore(BaseModel):
         """Create LookMLExplore from dictionary with nested type conversion."""
         data = data.copy()
 
+        alias_to_view_mapping = {}
+        if "view_name" in data and "name" in data:
+            alias_to_view_mapping[data["name"]] = data["view_name"]
+
+        # Convert nested from field
+        if "from" in data and "name" in data:
+            data["from"] = LookMLExploreFrom.from_dict(data["from"])
+            alias_to_view_mapping[data["name"]] = data["from"].name
+
+        # Convert nested joins
+        if "joins" in data and data["joins"]:
+            data["joins"] = [
+                LookMLJoin.from_dict(j, alias_to_view_mapping) if isinstance(j, dict) else j
+                for j in data["joins"]
+            ]
+
         # Convert nested always_filter
         if "always_filter" in data and data["always_filter"]:
-            data["always_filter"] = LookMLAlwaysFilter.from_dict(data["always_filter"])
+            data["always_filter"] = LookMLAlwaysFilter.from_dict(data["always_filter"], alias_to_view_mapping)
 
         # Convert nested conditionally_filter
         if "conditionally_filter" in data and data["conditionally_filter"]:
-            data["conditionally_filter"] = LookMLConditionallyFilter.from_dict(data["conditionally_filter"])
+            data["conditionally_filter"] = LookMLConditionallyFilter.from_dict(
+                data["conditionally_filter"], alias_to_view_mapping
+            )
 
         # Convert nested access_filter
         if "access_filter" in data and data["access_filter"]:
             data["access_filter"] = [
-                LookMLAccessFilter.from_dict(af) if isinstance(af, dict) else af
+                LookMLAccessFilter.from_dict(af, alias_to_view_mapping) if isinstance(af, dict) else af
                 for af in data["access_filter"]
             ]
-
-        # Convert nested joins
-        if "joins" in data and data["joins"]:
-            data["joins"] = [LookMLJoin.from_dict(j) if isinstance(j, dict) else j for j in data["joins"]]
-
-        # Convert nested from field
-        if "from" in data:
-            data["from"] = LookMLExploreFrom.from_dict(data["from"])
 
         return cls(**data)
 
