@@ -204,10 +204,14 @@ def test_dimension_group_conversion(lkml_dimension_group):
             ],
             "name": "distinct_influencer_blog_purchasers",
         },
+        {"type": "count", "name": "count"},
     ],
 )
 def test_measure_conversion(lkml_measure):
-    converted = LookMLProjectConverter.convert_measure(LookMLMeasure.from_dict(lkml_measure))
+    if lkml_measure["name"] == "count":
+        converted = LookMLProjectConverter.convert_measure(LookMLMeasure.from_dict(lkml_measure), "myview.id")
+    else:
+        converted = LookMLProjectConverter.convert_measure(LookMLMeasure.from_dict(lkml_measure))
 
     if lkml_measure["name"] in {"latest_order", "first_order"}:
         correct = {}
@@ -230,6 +234,8 @@ def test_measure_conversion(lkml_measure):
             {"field": "permanent_session_view.referrer", "value": "influencer"},
         ]
         correct["field_type"] = "measure"
+    elif lkml_measure["name"] == "count":
+        correct = {**lkml_measure, "field_type": "measure", "sql": "${myview.id}"}
 
     assert converted == correct
 

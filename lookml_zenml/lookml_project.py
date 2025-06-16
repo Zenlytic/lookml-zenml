@@ -342,7 +342,14 @@ class LookMLProjectConverter:
             for field in view.dimension_groups
             if (f := LookMLProjectConverter.convert_dimension_group(field))
         ]
-        measures = [f for field in view.measures if (f := LookMLProjectConverter.convert_measure(field))]
+        view_primary_key = next((f["name"] for f in dimensions if f.get("primary_key", False)), None)
+        if view_primary_key:
+            view_primary_key = view.name + "." + view_primary_key
+        measures = [
+            f
+            for field in view.measures
+            if (f := LookMLProjectConverter.convert_measure(field, view_primary_key))
+        ]
 
         fields = dimensions + dimension_groups + measures
 
@@ -749,15 +756,20 @@ class LookMLProjectConverter:
         return LookMLProjectConverter.sort_dict(converted, FIELD_KEY_ORDER)
 
     @staticmethod
-    def convert_measure(measure: LookMLMeasure):
+    def convert_measure(measure: LookMLMeasure, view_primary_key: str = None):
         # These measure types are not supported in LookML -> ZenML conversion
         if measure.type and measure.type in UNSUPPORTED_MEASURE_TYPES:
             return {}
 
+        if view_primary_key:
+            view_primary_key_sql = f"${{{view_primary_key}}}"
+        else:
+            view_primary_key_sql = "*"
+
         converted = {
             "name": measure.name,
             "field_type": "measure",
-            "sql": measure.sql.replace("\\n", "\n") if measure.sql else "",
+            "sql": measure.sql.replace("\\n", "\n") if measure.sql else view_primary_key_sql,
         }
         if measure.label:
             converted["label"] = measure.label
