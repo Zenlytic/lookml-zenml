@@ -807,9 +807,9 @@ class LookMLProjectConverter:
         }
 
         if explore_object.label:
-            topic["label"] = explore_object.label
+            topic["label"] = explore_object.label.strip()
         else:
-            topic["label"] = explore_object.name.replace("_", " ").title()
+            topic["label"] = explore_object.name.replace("_", " ").title().strip()
         if explore_object.description:
             topic["description"] = explore_object.description
         if explore_object.hidden is not None:

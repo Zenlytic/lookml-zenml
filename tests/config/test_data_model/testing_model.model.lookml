@@ -56,7 +56,7 @@ explore: user_view {
 
 explore: all_visitors_view {
   from:  all_visitors
-  label: "Sessions"
+  label: "Sessions "
   view_label: "All Visitors"
 
   join: orders_view {
