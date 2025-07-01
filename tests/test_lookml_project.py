@@ -21,14 +21,13 @@ def test_lookml_project_convert_project():
 
     models, views, dashboards, topics = project.convert_project(project_dict)
 
-    # print(models)
-    # print()
-    # print(views)
-    # print()
-    # print(dashboards)
-
     assert len(models) == 1
     assert models[0]["name"] == "testing_model"
+
+    assert len(topics) == 3
+    assert topics[0]["name"] == "user_view"
+    assert topics[1]["name"] == "all_visitors_view"
+    assert topics[2]["name"] == "zendesk_tickets"
 
     assert len(views) == 9
     assert views[0]["name"] == "last_touch_attribution_view"

@@ -666,6 +666,7 @@ class LookMLProject(BaseModel):
     models: List[LookMLModel]
     views: List[LookMLView]
     dashboards: List[LookMLDashboard]
+    explores: Optional[List[LookMLExplore]] = []
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LookMLProject":
@@ -684,6 +685,12 @@ class LookMLProject(BaseModel):
         if "dashboards" in data and data["dashboards"]:
             data["dashboards"] = [
                 LookMLDashboard.from_dict(d) if isinstance(d, dict) else d for d in data["dashboards"]
+            ]
+
+        # Convert nested explores
+        if "explores" in data and data["explores"]:
+            data["explores"] = [
+                LookMLExplore.from_dict(e) if isinstance(e, dict) else e for e in data["explores"]
             ]
 
         return cls(**data)

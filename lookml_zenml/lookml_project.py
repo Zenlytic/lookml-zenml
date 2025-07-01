@@ -109,9 +109,14 @@ class LookMLProjectConverter:
                 topic = self.convert_topic(explore_object, model["name"])
                 topics.append(topic)
 
+        self._default_model_name = models[0]["name"] if len(models) == 1 else "TODO"
+
+        for explore_object in lookml_project.explores:
+            topic = self.convert_topic(explore_object, self._default_model_name)
+            topics.append(topic)
+
         self._models = models
 
-        self._default_model_name = models[0]["name"]
         for view_object in lookml_project.views:
             view = self.convert_view(
                 view_object,
@@ -615,7 +620,7 @@ class LookMLProjectConverter:
         return fields_to_replace(text)
 
     def load(self, in_directory: str):
-        lookml = {"views": [], "models": [], "dashboards": []}
+        lookml = {"views": [], "models": [], "dashboards": [], "explores": []}
         for root, _, files in os.walk(in_directory):
             for file in files:
                 if self.is_lookml_file(file):
@@ -628,14 +633,22 @@ class LookMLProjectConverter:
                         lookml["models"].append(lookml_dict)
                     elif ".view." in file:
                         lookml["views"].extend(lookml_dict["views"])
+                    elif ".explore." in file:
+                        lookml["explores"].extend(lookml_dict["explores"])
                     else:
-                        raise NotImplementedError(f"File {file} is not a model or view")
+                        raise NotImplementedError(f"File {file} is not a model, view, or explore")
 
                 if self.is_lookml_dashboard_file(file):
                     lookml_file = os.path.join(root, file)
                     with open(lookml_file) as f:
                         lookml_dict = yaml.load(f)
                     lookml["dashboards"].extend(lookml_dict)
+
+        # If there are explores and only one model, add them to the model
+        if len(lookml["explores"]) > 0 and len(lookml["models"]) == 1:
+            lookml["models"][0]["explores"].extend(lookml["explores"])
+            lookml.pop("explores")
+
         return lookml
 
     @staticmethod
@@ -876,7 +889,14 @@ class LookMLProjectConverter:
 
     @staticmethod
     def is_lookml_file(file):
-        suffixes = [".model.lkml", ".view.lkml", ".model.lookml", ".view.lookml"]
+        suffixes = [
+            ".model.lkml",
+            ".view.lkml",
+            ".explore.lkml",
+            ".model.lookml",
+            ".view.lookml",
+            ".explore.lookml",
+        ]
         return any(file.endswith(suffix) for suffix in suffixes)
 
     @staticmethod

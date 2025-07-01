@@ -37,6 +37,10 @@ def test_convert_model_join_resolution():
     with open(path, "r") as file:
         lkml_result = lkml.load(file)
         lkml_result["name"] = "testing_model"
+    path = os.path.join(DATA_MODEL_DIRECTORY, "zendesk.explore.lookml")
+    with open(path, "r") as file:
+        lkml_result_explore = lkml.load(file)
+        lkml_result["explores"].extend(lkml_result_explore["explores"])
 
     metadata_result = LookMLProjectConverter.convert_model(
         LookMLModel.from_dict(lkml_result), generate_view_metadata=True
