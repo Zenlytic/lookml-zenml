@@ -117,6 +117,7 @@ class LookMLProjectConverter:
 
         self._models = models
 
+        refinements, extensions = [], []
         for view_object in lookml_project.views:
             view = self.convert_view(
                 view_object,
@@ -124,16 +125,78 @@ class LookMLProjectConverter:
                 access_filters=[],
                 joins=view_metadata.get(view_object.name, []),
             )
-            views.append(view)
+            # Syntax like +churn_view indicates a refinement, not a stand alone view
+            if view["name"][0] == "+":
+                refinements.append(view)
+            elif view_object.extends:
+                for extension in view_object.extends:
+                    extensions.append(
+                        {**view, "extension_of": extension, "extension_setting": view_object.extension}
+                    )
+            else:
+                views.append(view)
 
-        self._views = views
+        # Incorporate refinements
+        for refinement in refinements:
+            view_name_to_merge = refinement["name"][1:]
+            for view in views:
+                if view["name"] == view_name_to_merge:
+                    view["fields"] += refinement["fields"]
+
+        for extension in extensions:
+            extension_settings = extension.pop("extension_setting")
+            extension_of = extension.pop("extension_of")
+            modified_views = []
+            for view in views:
+                if view["name"] == extension_of:
+                    existing_fields = view.pop("fields", [])
+                    existing_field_names = [f["name"] for f in existing_fields]
+                    extension_fields = extension.pop("fields", [])
+                    combined_fields, overridden_field_names = [], set([])
+
+                    # Process extension fields
+                    for field in extension_fields:
+                        # If an extension references a field in the original table recursively
+                        # Wwe need to replace that reference with the actual SQL from the original table
+                        if field["name"] in existing_field_names:
+                            existing_field = next(f for f in existing_fields if f["name"] == field["name"])
+                            field["sql"] = field["sql"].replace(
+                                "${" + field["name"] + "}", existing_field["sql"]
+                            )
+                            overridden_field_names.add(field["name"])
+                        combined_fields.append(field)
+
+                    # Add the original fields
+                    combined_fields.extend(
+                        [f for f in existing_fields if f["name"] not in overridden_field_names]
+                    )
+                    extension_object = {**view, **extension, "fields": list(reversed(combined_fields))}
+
+                    # If the extension is required, override the view name, if not append with the extension name
+                    if extension_settings == "required":
+                        extension_object["name"] = view["name"]
+                        modified_views.append(extension_object)
+                    else:
+                        extension_object["name"] = extension["name"]
+                        views.append(extension_object)
+
+        final_views = []
+        for view in views:
+            overridden_view = next((v for v in modified_views if v["name"] == view["name"]), None)
+            if overridden_view:
+                final_views.append(overridden_view)
+
+            else:
+                final_views.append(view)
+
+        self._views = final_views
 
         # Process dashboards with validation
         for dashboard_object in lookml_project.dashboards:
             dashboard = self.convert_dashboard(dashboard_object)
             dashboards.append(dashboard)
 
-        return models, views, dashboards, topics
+        return models, final_views, dashboards, topics
 
     @staticmethod
     def convert_model(model_object: LookMLModel, generate_view_metadata: bool = False):

@@ -231,6 +231,8 @@ class LookMLView(BaseModel):
     """Pydantic model for LookML view."""
 
     name: str
+    extends: Optional[List[str]] = []
+    extension: Optional[str] = None
     view_label: Optional[str] = None
     description: Optional[str] = None
     sql_table_name: Optional[str] = None
@@ -247,6 +249,9 @@ class LookMLView(BaseModel):
     def from_dict(cls, data: Dict[str, Any]) -> "LookMLView":
         """Create LookMLView from dictionary with nested type conversion."""
         data = data.copy()
+
+        if "extends__all" in data:
+            data["extends"] = [extends for collection in data["extends__all"] for extends in collection]
 
         # Convert nested derived_table
         if "derived_table" in data and data["derived_table"]:
