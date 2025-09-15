@@ -130,73 +130,70 @@ class LookMLProjectConverter:
                 refinements.append(view)
             elif view_object.extends:
                 for extension in view_object.extends:
-                    extensions.append(
-                        {**view, "extension_of": extension, "extension_setting": view_object.extension}
-                    )
+                    extensions.append({**view, "extension_of": extension})
             else:
                 views.append(view)
 
-        # Incorporate refinements
+        # Apply extensions first
+        for extension in extensions:
+            extension_of = extension.pop("extension_of")
+            for view in views:
+                if view["name"] == extension_of:
+                    existing_fields = view.get("fields", [])
+                    extension_fields = extension.get("fields", [])
+                    combined_fields = self._merge_field_lists(extension_fields, existing_fields)
+                    extension_object = {**view, **extension, "fields": combined_fields}
+                    views.append(extension_object)
+
+        # Incorporate refinements last
         for refinement in refinements:
             view_name_to_merge = refinement["name"][1:]
             for view in views:
                 if view["name"] == view_name_to_merge:
-                    view["fields"] += refinement["fields"]
-
-        for extension in extensions:
-            extension_settings = extension.pop("extension_setting")
-            extension_of = extension.pop("extension_of")
-            modified_views = []
-            for view in views:
-                if view["name"] == extension_of:
                     existing_fields = view.pop("fields", [])
-                    existing_field_names = [f["name"] for f in existing_fields]
-                    extension_fields = extension.pop("fields", [])
-                    combined_fields, overridden_field_names = [], set([])
+                    extension_fields = refinement.pop("fields", [])
+                    combined_fields = self._merge_field_lists(extension_fields, existing_fields)
+                    for property_key, property_value in refinement.items():
+                        view[property_key] = property_value
+                    view["fields"] = combined_fields
+                    view["name"] = view_name_to_merge
 
-                    # Process extension fields
-                    for field in extension_fields:
-                        # If an extension references a field in the original table recursively
-                        # Wwe need to replace that reference with the actual SQL from the original table
-                        if field["name"] in existing_field_names:
-                            existing_field = next(f for f in existing_fields if f["name"] == field["name"])
-                            field["sql"] = field["sql"].replace(
-                                "${" + field["name"] + "}", existing_field["sql"]
-                            )
-                            overridden_field_names.add(field["name"])
-                        combined_fields.append(field)
-
-                    # Add the original fields
-                    combined_fields.extend(
-                        [f for f in existing_fields if f["name"] not in overridden_field_names]
-                    )
-                    extension_object = {**view, **extension, "fields": list(reversed(combined_fields))}
-
-                    # If the extension is required, override the view name, if not append with the extension name
-                    if extension_settings == "required":
-                        extension_object["name"] = view["name"]
-                        modified_views.append(extension_object)
-                    else:
-                        extension_object["name"] = extension["name"]
-                        views.append(extension_object)
-
-        final_views = []
-        for view in views:
-            overridden_view = next((v for v in modified_views if v["name"] == view["name"]), None)
-            if overridden_view:
-                final_views.append(overridden_view)
-
-            else:
-                final_views.append(view)
-
-        self._views = final_views
+        self._views = views
 
         # Process dashboards with validation
         for dashboard_object in lookml_project.dashboards:
             dashboard = self.convert_dashboard(dashboard_object)
             dashboards.append(dashboard)
 
-        return models, final_views, dashboards, topics
+        return models, views, dashboards, topics
+
+    @staticmethod
+    def _merge_field_lists(extension_fields: list, base_fields: list) -> list:
+        existing_field_names = [f["name"] for f in base_fields]
+
+        # Process extension fields
+        combined_fields, overridden_field_names = [], set([])
+        for field in extension_fields:
+            if field["name"] in existing_field_names:
+                existing_field = next(f for f in base_fields if f["name"] == field["name"])
+                field = LookMLProjectConverter._refine_field(field, existing_field)
+                overridden_field_names.add(field["name"])
+            combined_fields.append(field)
+
+        # Add the original fields
+        combined_fields.extend([f for f in base_fields if f["name"] not in overridden_field_names])
+        return list(reversed(combined_fields))
+
+    @staticmethod
+    def _refine_field(extension_field: dict, base_field: dict):
+        field_properties = {**base_field, **extension_field}
+        # If an extension references a field in the original table recursively
+        # We need to replace that reference with the actual SQL from the original table
+        if "sql" in field_properties and "sql" in base_field:
+            field_properties["sql"] = field_properties["sql"].replace(
+                "${" + field_properties["name"] + "}", base_field["sql"]
+            )
+        return field_properties
 
     @staticmethod
     def convert_model(model_object: LookMLModel, generate_view_metadata: bool = False):
@@ -393,6 +390,9 @@ class LookMLProjectConverter:
 
         if view.description:
             zenml_view["description"] = view.description
+
+        if view.fields_hidden_by_default or view.extension == "required":
+            zenml_view["hidden"] = True
 
         if view.sql_table_name:
             zenml_view["sql_table_name"] = view.sql_table_name

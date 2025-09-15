@@ -35,9 +35,20 @@ def test_lookml_project_convert_project():
     assert ext_base_view["sql_table_name"] == "`prod.support_interactions`"
     num_filter_field = next((f for f in ext_base_view["fields"] if f["name"] == "total_count"))
     num_filter_field["filters"][0]["value"] == "1"
-    assert next((f for f in ext_base_view["fields"] if f["name"] == "avg_hold_time"))
-    assert next((f for f in ext_base_view["fields"] if f["name"] == "total_unique_scores"))
-    override_field = next((f for f in ext_base_view["fields"] if f["name"] == "confidence_score"))
+
+    with pytest.raises(StopIteration):
+        next((f for f in ext_base_view["fields"] if f["name"] == "avg_hold_time"))
+
+    ext_support_interactions = next(v for v in views if v["name"] == "ext_support_interactions")
+
+    # This is hidden because extension is required
+    assert ext_support_interactions["hidden"] is True
+    assert ext_support_interactions["model_name"] == "testing_model"
+    assert ext_support_interactions["sql_table_name"] == "`prod.support_interactions`"
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "total_count"))
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "total_unique_scores"))
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "avg_hold_time"))
+    override_field = next((f for f in ext_support_interactions["fields"] if f["name"] == "confidence_score"))
     assert override_field["type"] == "number"
     assert override_field["sql"] == "SAFE_CAST(${TABLE}.confidence_score as NUMERIC)"
 
@@ -49,7 +60,7 @@ def test_lookml_project_convert_project():
     assert topics[1]["name"] == "all_visitors_view"
     assert topics[2]["name"] == "zendesk_tickets"
 
-    assert len(views) == 11
+    assert len(views) == 12
     assert views[0]["name"] == "last_touch_attribution_view"
 
     assert len(dashboards) == 3

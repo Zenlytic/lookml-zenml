@@ -235,6 +235,7 @@ class LookMLView(BaseModel):
     extension: Optional[str] = None
     view_label: Optional[str] = None
     description: Optional[str] = None
+    fields_hidden_by_default: Optional[str] = None
     sql_table_name: Optional[str] = None
     derived_table: Optional[LookMLDerivedTable] = None
     required_access_grants: Optional[List[str]] = []
