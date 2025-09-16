@@ -20,6 +20,38 @@ def test_lookml_project_convert_project():
     project_dict = project.load(in_directory=DATA_MODEL_DIRECTORY)
 
     models, views, dashboards, topics = project.convert_project(project_dict)
+    refinement_view = next(v for v in views if v["name"] == "churn")
+
+    # Test the refinement wasn't added separately
+    assert len([v for v in views if "churn" in v["name"]]) == 1
+    assert refinement_view["sql_table_name"] == "`prod.churn_details`"
+    assert any(f["name"] == "total_churns" for f in refinement_view["fields"])
+    assert any(f["name"] == "churn" for f in refinement_view["fields"])
+    assert any(f["name"] == "account_id" for f in refinement_view["fields"])
+
+    ext_base_view = next(v for v in views if v["name"] == "support_interactions")
+
+    assert ext_base_view["model_name"] == "testing_model"
+    assert ext_base_view["sql_table_name"] == "`prod.support_interactions`"
+    num_filter_field = next((f for f in ext_base_view["fields"] if f["name"] == "total_count"))
+    num_filter_field["filters"][0]["value"] == "1"
+
+    with pytest.raises(StopIteration):
+        next((f for f in ext_base_view["fields"] if f["name"] == "avg_hold_time"))
+
+    ext_support_interactions = next(v for v in views if v["name"] == "ext_support_interactions")
+
+    assert ext_support_interactions["required_access_grants"] == ["my_access_grant"]
+    # This is hidden because extension is required
+    assert ext_support_interactions["hidden"] is True
+    assert ext_support_interactions["model_name"] == "testing_model"
+    assert ext_support_interactions["sql_table_name"] == "`prod.support_interactions`"
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "total_count"))
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "total_unique_scores"))
+    assert next((f for f in ext_support_interactions["fields"] if f["name"] == "avg_hold_time"))
+    override_field = next((f for f in ext_support_interactions["fields"] if f["name"] == "confidence_score"))
+    assert override_field["type"] == "number"
+    assert override_field["sql"] == "SAFE_CAST(${TABLE}.confidence_score as NUMERIC)"
 
     assert len(models) == 1
     assert models[0]["name"] == "testing_model"
@@ -29,7 +61,7 @@ def test_lookml_project_convert_project():
     assert topics[1]["name"] == "all_visitors_view"
     assert topics[2]["name"] == "zendesk_tickets"
 
-    assert len(views) == 9
+    assert len(views) == 12
     assert views[0]["name"] == "last_touch_attribution_view"
 
     assert len(dashboards) == 3

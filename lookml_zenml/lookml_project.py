@@ -1,4 +1,3 @@
-import re
 import os
 import lkml
 import json
@@ -22,6 +21,21 @@ from lookml_zenml.lookml_models import (
 )
 
 FIELD_KEY_ORDER = ["name", "field_type", "type", "description", "timeframes", "sql"]
+VIEW_KEY_ORDER = [
+    "version",
+    "type",
+    "name",
+    "model_name",
+    "required_access_grants",
+    "sets",
+    "access_filters",
+    "sql_table_name",
+    "default_date",
+    "identifiers",
+    "hidden",
+    "fields",
+]
+
 UNSUPPORTED_MEASURE_TYPES = [
     "date",
     "date_time",
@@ -109,7 +123,14 @@ class LookMLProjectConverter:
                 topic = self.convert_topic(explore_object, model["name"])
                 topics.append(topic)
 
-        self._default_model_name = models[0]["name"] if len(models) == 1 else "TODO"
+        if len(models) == 1:
+            self._default_model_name = models[0]["name"]
+        else:
+            print(
+                "Multiple models found, using TODO as default model name for views, topics, and dashboards"
+                ". Update the TODO model_name to the model you would like to use"
+            )
+            self._default_model_name = "TODO"
 
         for explore_object in lookml_project.explores:
             topic = self.convert_topic(explore_object, self._default_model_name)
@@ -117,6 +138,7 @@ class LookMLProjectConverter:
 
         self._models = models
 
+        refinements, extensions = [], []
         for view_object in lookml_project.views:
             view = self.convert_view(
                 view_object,
@@ -124,7 +146,43 @@ class LookMLProjectConverter:
                 access_filters=[],
                 joins=view_metadata.get(view_object.name, []),
             )
-            views.append(view)
+            # Syntax like +churn_view indicates a refinement, not a stand alone view
+            if view["name"][0] == "+":
+                refinements.append(view)
+            elif view_object.extends:
+                for extension in view_object.extends:
+                    extensions.append({**view, "extension_of": extension})
+            else:
+                views.append(view)
+
+        # Apply extensions first
+        for extension in extensions:
+            extension_of = extension.pop("extension_of")
+            for view in views:
+                if view["name"] == extension_of:
+                    existing_fields = view.get("fields", [])
+                    extension_fields = extension.get("fields", [])
+                    combined_fields = self._merge_field_lists(extension_fields, existing_fields)
+                    extension_object = {**view}
+                    for property_key, property_value in extension.items():
+                        if property_value or isinstance(property_value, bool):
+                            extension_object[property_key] = property_value
+                    extension_object["fields"] = combined_fields
+                    views.append(extension_object)
+
+        # Incorporate refinements last
+        for refinement in refinements:
+            view_name_to_merge = refinement["name"][1:]
+            for view in views:
+                if view["name"] == view_name_to_merge:
+                    existing_fields = view.pop("fields", [])
+                    extension_fields = refinement.pop("fields", [])
+                    combined_fields = self._merge_field_lists(extension_fields, existing_fields)
+                    for property_key, property_value in refinement.items():
+                        if property_value or isinstance(property_value, bool):
+                            view[property_key] = property_value
+                    view["fields"] = combined_fields
+                    view["name"] = view_name_to_merge
 
         self._views = views
 
@@ -134,6 +192,34 @@ class LookMLProjectConverter:
             dashboards.append(dashboard)
 
         return models, views, dashboards, topics
+
+    @staticmethod
+    def _merge_field_lists(extension_fields: list, base_fields: list) -> list:
+        existing_field_names = [f["name"] for f in base_fields]
+
+        # Process extension fields
+        combined_fields, overridden_field_names = [], set([])
+        for field in extension_fields:
+            if field["name"] in existing_field_names:
+                existing_field = next(f for f in base_fields if f["name"] == field["name"])
+                field = LookMLProjectConverter._refine_field(field, existing_field)
+                overridden_field_names.add(field["name"])
+            combined_fields.append(field)
+
+        # Add the original fields
+        combined_fields.extend([f for f in base_fields if f["name"] not in overridden_field_names])
+        return list(reversed(combined_fields))
+
+    @staticmethod
+    def _refine_field(extension_field: dict, base_field: dict):
+        field_properties = {**base_field, **extension_field}
+        # If an extension references a field in the original table recursively
+        # We need to replace that reference with the actual SQL from the original table
+        if "sql" in field_properties and "sql" in base_field:
+            field_properties["sql"] = field_properties["sql"].replace(
+                "${" + field_properties["name"] + "}", base_field["sql"]
+            )
+        return field_properties
 
     @staticmethod
     def convert_model(model_object: LookMLModel, generate_view_metadata: bool = False):
@@ -331,6 +417,9 @@ class LookMLProjectConverter:
         if view.description:
             zenml_view["description"] = view.description
 
+        if view.fields_hidden_by_default or view.extension == "required":
+            zenml_view["hidden"] = True
+
         if view.sql_table_name:
             zenml_view["sql_table_name"] = view.sql_table_name
 
@@ -407,13 +496,13 @@ class LookMLProjectConverter:
             return None
 
         elif element.type == "text":
-            model_name = self._default_model_name if self._default_model_name else "todo"
+            model_name = self._default_model_name
             zenml_element = {"model": model_name, "type": "markdown", "size": "quarter"}
             zenml_element["content"] = element.body_text
             return zenml_element
 
         elif element.type == "button":
-            model_name = self._default_model_name if self._default_model_name else "todo"
+            model_name = self._default_model_name
             zenml_element = {"model": model_name, "type": "markdown", "size": "quarter"}
             content_json = json.loads(element.rich_content_json)
             link_url = content_json.get("href", "")
@@ -678,7 +767,7 @@ class LookMLProjectConverter:
 
         for view in views:
             with open(os.path.join(out_directory, f"views/{view['name']}_view.yml"), "w") as f:
-                yaml.dump(view, f)
+                yaml.dump(LookMLProjectConverter.sort_dict(view, VIEW_KEY_ORDER), f)
 
         for dashboard in dashboards:
             with open(os.path.join(out_directory, f"dashboards/{dashboard['name']}.yml"), "w") as f:
