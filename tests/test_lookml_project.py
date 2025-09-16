@@ -41,6 +41,7 @@ def test_lookml_project_convert_project():
 
     ext_support_interactions = next(v for v in views if v["name"] == "ext_support_interactions")
 
+    assert ext_support_interactions["required_access_grants"] == ["my_access_grant"]
     # This is hidden because extension is required
     assert ext_support_interactions["hidden"] is True
     assert ext_support_interactions["model_name"] == "testing_model"

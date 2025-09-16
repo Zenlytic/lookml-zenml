@@ -1,6 +1,6 @@
 view: support_interactions {
   sql_table_name: `prod.support_interactions` ;;
-
+  required_access_grants: [my_access_grant]
 
   dimension: totalcalltime {
     label: "Total Call Time"
